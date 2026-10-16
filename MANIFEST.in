@@ -1,0 +1,6 @@
+include README.md
+include LICENSE.txt
+prune tests
+prune examples
+global-exclude __pycache__ *.py[cod]
+
