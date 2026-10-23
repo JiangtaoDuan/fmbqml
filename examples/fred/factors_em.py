@@ -143,12 +143,12 @@ def factors_em(x, kmax, jj, DEMEAN):
         v1 = diff.reshape(-1, 1)
         v2 = chat0.reshape(-1, 1)
 
-        denominator = float(v2.T @ v2)
+        denominator = float((v2.T @ v2).item())
 
         if denominator == 0:
             denominator = np.finfo(float).eps
 
-        err = float((v1.T @ v1) / denominator)
+        err = float((v1.T @ v1).item()) / denominator
 
         chat0 = chat.copy()
 
