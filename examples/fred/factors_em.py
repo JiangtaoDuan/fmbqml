@@ -3,7 +3,7 @@ import numpy as np
 
 def factors_em(x, kmax, jj, DEMEAN):
     """
-    Python version of factors_em.m
+    Expectation-maximization algorithm for factor models.
 
     Parameters
     ----------
@@ -166,7 +166,7 @@ def factors_em(x, kmax, jj, DEMEAN):
 
 def baing(X, kmax, jj):
     """
-    Python version of baing() subfunction in factors_em.m.
+    Select the number of factors using information criteria.
 
     Parameters
     ----------
@@ -288,7 +288,7 @@ def baing(X, kmax, jj):
 
 def pc2(X, nfac):
     """
-    Python version of pc2() subfunction in factors_em.m.
+    Estimate factors and loadings using principal component analysis.
 
     Parameters
     ----------
@@ -337,9 +337,7 @@ def pc2(X, nfac):
 
 def minindc(x):
     """
-    Python version of minindc() subfunction in factors_em.m.
-
-    This returns MATLAB-style 1-based row indices.
+    Return the 1-based row indices of the minimum values.
     """
 
     x = np.asarray(x, dtype=float)
@@ -367,7 +365,7 @@ def minindc(x):
 
 def transform_data(x2, DEMEAN):
     """
-    Python version of transform_data() subfunction in factors_em.m.
+    Transform the dataset according to the specified preprocessing method.
 
     Parameters
     ----------
