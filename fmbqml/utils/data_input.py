@@ -6,6 +6,65 @@ import numpy as np
 import pandas as pd
 
 
+def validate_real_input(X, name: str = "X") -> np.ndarray:
+    """Convert input to a finite real-valued float array without discarding data.
+
+    Complex-valued inputs are rejected before conversion. This check also covers
+    object arrays containing Python or NumPy complex scalars, for which
+    ``np.iscomplexobj`` on the array itself is not sufficient.
+    """
+    try:
+        raw = X.to_numpy() if isinstance(X, pd.DataFrame) else np.asarray(X)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise TypeError(
+            f"{name} must be convertible to a real numeric array."
+        ) from exc
+
+    contains_complex = np.iscomplexobj(raw)
+    if not contains_complex and raw.dtype.kind == "O":
+        contains_complex = any(np.iscomplexobj(value) for value in raw.flat)
+
+    if contains_complex:
+        raise ValueError(
+            f"{name} must be real-valued; complex input is not supported."
+        )
+
+    try:
+        array = np.asarray(raw, dtype=float)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise TypeError(
+            f"{name} must be convertible to a real numeric array."
+        ) from exc
+
+    if not np.isfinite(array).all():
+        raise ValueError(f"{name} contains NaN or Inf.")
+
+    return array
+
+
+def _validate_panel_data(X, name: str = "X") -> np.ndarray:
+    """Validate the panel once at the model/input-preparation boundary."""
+    array = validate_real_input(X, name=name)
+    if array.ndim != 2:
+        raise ValueError(
+            f"Input {name} must be a 2D array (T x N). Got {array.ndim}D array."
+        )
+    T, N = array.shape
+    if T < 2:
+        raise ValueError(f"Sample size T must be at least 2. Got T={T}.")
+    if N < 1:
+        raise ValueError(f"Number of variables N must be at least 1. Got N={N}.")
+    return array
+
+
+
+def _validate_break_panel(X) -> np.ndarray:
+    """Validate panel shape and variation once when data enter a model."""
+    array = _validate_panel_data(X)
+    if np.all(array == array[0]):
+        raise ValueError("Input X must have time variation for break estimation.")
+    return array
+
 def prepare_input_data(
         X: Union[np.ndarray, pd.DataFrame]
 ) -> Tuple[np.ndarray, Union[np.ndarray, pd.DataFrame], Optional[Any]]:
@@ -26,12 +85,11 @@ def prepare_input_data(
     row_index : pandas.Index or None
         Original row index if X is a DataFrame; otherwise None.
     """
+    data_array = _validate_break_panel(X)
     if isinstance(X, pd.DataFrame):
-        data_array = X.to_numpy(dtype=float)
         original_data = X.copy()
         row_index = X.index.copy()
     else:
-        data_array = np.asarray(X, dtype=float)
         original_data = data_array.copy()
         row_index = None
 
@@ -66,14 +124,13 @@ def prepare_multi_input_data(
     is_dataframe : bool
         Whether the supplied input was a DataFrame.
     """
+    data_array = _validate_break_panel(X)
     if isinstance(X, pd.DataFrame):
-        data_array = X.to_numpy(dtype=float)
         original_data = X.copy()
         row_index = X.index.copy()
         columns = X.columns.copy()
         is_dataframe = True
     else:
-        data_array = np.asarray(X, dtype=float)
         original_data = data_array.copy()
         row_index = None
         columns = None

@@ -1,8 +1,25 @@
+
 """QML objective-profile computation for a single breakpoint."""
 
 import numpy as np
 
 from fmbqml.utils.safe_logdet import safe_logdet
+
+
+def _segment_logdet(second_moment: np.ndarray) -> float:
+    """Return the log-determinant, or +inf if computation fails."""
+    matrix = np.asarray(second_moment, dtype=float)
+
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+        raise ValueError("Segment second-moment matrix must be square.")
+
+    if not np.isfinite(matrix).all():
+        return np.inf
+
+    try:
+        return safe_logdet(matrix)
+    except np.linalg.LinAlgError:
+        return np.inf
 
 
 def compute_single_break_qml_profile(
@@ -12,13 +29,17 @@ def compute_single_break_qml_profile(
         t_max: int,
         n_factors: int
 ) -> np.ndarray:
-    """
-    Compute the single-break QML objective profile over candidate breakpoints.
+    """Compute the single-break QML objective profile.
+
+    Candidate locations are evaluated over the supplied trimming range.
+    A candidate is assigned an infinite objective value if either regime
+    contains fewer observations than the number of estimated factors,
+    or if its segment second-moment matrix cannot be evaluated.
 
     Parameters
     ----------
-    F_hat : np.ndarray
-        Estimated factor matrix with shape (T, n_factors).
+    F_hat : ndarray of shape (T, n_factors)
+        Estimated factor matrix.
     T : int
         Sample size.
     t_min : int
@@ -30,35 +51,78 @@ def compute_single_break_qml_profile(
 
     Returns
     -------
-    np.ndarray
-        Array of QML objective values for candidate breakpoints.
+    qml_profile : ndarray
+        QML objective values for candidate breakpoints from t_min
+        through t_max. Numerically unusable candidates are assigned
+        infinite objective values.
 
     Raises
     ------
     ValueError
-        If no valid candidate breakpoints are available.
+        If the factor matrix dimensions or candidate range are invalid,
+        or if no candidate has numerically usable segment matrices.
     """
-    qml_profile = []
+    F_hat = np.asarray(F_hat, dtype=float)
 
-    for k in range(t_min, t_max + 1):
-        if k <= n_factors + 1 or (T - k) <= n_factors + 1:
-            qml_profile.append(np.inf)
+    if F_hat.ndim != 2:
+        raise ValueError("F_hat must be a two-dimensional array.")
+
+    if F_hat.shape[0] != T:
+        raise ValueError("F_hat must have T rows.")
+
+    if F_hat.shape[1] != n_factors:
+        raise ValueError(
+            "n_factors must match the number of columns in F_hat."
+        )
+
+    if (
+        isinstance(t_min, (bool, np.bool_))
+        or not isinstance(t_min, (int, np.integer))
+        or isinstance(t_max, (bool, np.bool_))
+        or not isinstance(t_max, (int, np.integer))
+    ):
+        raise ValueError("t_min and t_max must be integers.")
+
+    if t_min < 1 or t_max >= T or t_min > t_max:
+        raise ValueError(
+            f"Invalid candidate range [{t_min}, {t_max}] for T={T}."
+        )
+
+    qml_profile = np.full(
+        t_max - t_min + 1,
+        np.inf,
+        dtype=float
+    )
+
+    for index, k in enumerate(range(t_min, t_max + 1)):
+
+        # A segment shorter than the factor dimension
+        # cannot produce a full-rank second-moment matrix.
+        if k < n_factors or (T - k) < n_factors:
             continue
 
-        sigma_left = F_hat[:k, :].T @ F_hat[:k, :] / k
-        sigma_right = F_hat[k:, :].T @ F_hat[k:, :] / (T - k)
+        sigma_left = (
+            F_hat[:k, :].T @ F_hat[:k, :]
+        ) / k
 
-        logdet_left = safe_logdet(sigma_left)
-        logdet_right = safe_logdet(sigma_right)
+        sigma_right = (
+            F_hat[k:, :].T @ F_hat[k:, :]
+        ) / (T - k)
 
-        qml_profile.append(k * logdet_left + (T - k) * logdet_right)
+        logdet_left = _segment_logdet(sigma_left)
+        logdet_right = _segment_logdet(sigma_right)
 
-    qml_profile = np.asarray(qml_profile, dtype=float)
+        if np.isfinite(logdet_left) and np.isfinite(logdet_right):
+            qml_profile[index] = (
+                k * logdet_left
+                + (T - k) * logdet_right
+            )
 
-    if np.all(np.isinf(qml_profile)):
+    if not np.isfinite(qml_profile).any():
         raise ValueError(
-            "No valid candidate breakpoints found. "
-            "Check sample size T, trim_ratio, or the estimated number of factors."
+            "No candidate breakpoint has numerically usable segment "
+            "second-moment matrices. The trimming-based candidate range "
+            "was retained, but all candidate costs were non-finite."
         )
 
     return qml_profile

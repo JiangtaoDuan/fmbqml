@@ -38,17 +38,18 @@ def plot_lr_profile(
         label="LR statistic"
     )
 
-    estimated_break = result.get(
-        "estimated_break_candidate",
-        result.get("break_point", None)
-    )
+    # Read the current result-object field names.
+    estimated_break = result.get("candidate_breakpoint")
+    if estimated_break is None:
+        estimated_break = result.get("breakpoint")
 
     if estimated_break is not None:
+        not_rejected = result.get("test_type") == "lr_test" and result.get("reject_null") is False
         ax.axvline(
             estimated_break,
             color="red",
             linestyle="--",
-            label="Estimated break"
+            label="Candidate break (under H1)" if not_rejected else "Estimated break"
         )
 
     if true_break is not None:
@@ -113,18 +114,19 @@ def plot_qml_profile(
         label="QML objective"
     )
 
-    estimated_break = result.get(
-        "estimated_break_candidate",
-        result.get("break_point", None)
-    )
+    # Read the current result-object field names.
+    estimated_break = result.get("candidate_breakpoint")
+    if estimated_break is None:
+        estimated_break = result.get("breakpoint")
 
     if estimated_break is not None:
+        not_rejected = result.get("test_type") == "lr_test" and result.get("reject_null") is False
         ax.axvline(
             estimated_break,
             color="red",
             linestyle="--",
             linewidth=1.8,
-            label="Estimated break"
+            label="Candidate break (under H1)" if not_rejected else "Estimated break"
         )
 
     if true_break is not None:
@@ -287,73 +289,6 @@ def plot_mqml_profile(
     ax.set_xlabel("Number of breaks")
     ax.set_title("MQML Joint-Estimation Profiles")
     ax.legend(handles, labels)
-    fig.tight_layout()
-
-    if save_path is not None:
-        fig.savefig(save_path, dpi=300, bbox_inches="tight")
-
-    if show:
-        plt.show()
-
-    return fig, ax
-
-
-def plot_joint_lr_profile(
-        result: Dict[str, Any],
-        figsize: Tuple[int, int] = (8, 4),
-        save_path: Optional[str] = None,
-        show: bool = True
-):
-    """
-    Plot the joint sup-LR profile over prespecified numbers of breaks.
-    """
-    profile = result.get("joint_lr_profile", None)
-
-    if profile is None:
-        raise ValueError(
-            "Joint LR profile is not available. "
-            "Run plot_joint_lr_profile() from MultiBreakQML first."
-        )
-
-    profile_df = pd.DataFrame(profile)
-
-    if profile_df.empty:
-        raise ValueError("Joint LR profile is empty.")
-
-    fig, ax = plt.subplots(figsize=figsize)
-
-    ax.plot(
-        profile_df["n_breaks"],
-        profile_df["test_statistic"],
-        marker="o",
-        color="blue",
-        label="Joint sup-LR statistic"
-    )
-
-    if "critical_value" in profile_df.columns:
-        ax.plot(
-            profile_df["n_breaks"],
-            profile_df["critical_value"],
-            marker="s",
-            linestyle="--",
-            color="red",
-            label="Critical value"
-        )
-
-    selected_m = result.get("n_breaks", None)
-    if selected_m is not None:
-        ax.axvline(
-            selected_m,
-            color="black",
-            linestyle=":",
-            linewidth=1.8,
-            label="Selected number of breaks"
-        )
-
-    ax.set_xlabel("Number of breaks")
-    ax.set_ylabel("Joint sup-LR statistic")
-    ax.set_title("Joint sup-LR Profile")
-    ax.legend()
     fig.tight_layout()
 
     if save_path is not None:

@@ -3,6 +3,7 @@
 from typing import Any, Dict, Optional
 
 import numpy as np
+import pandas as pd
 
 from fmbqml.utils.criteria import CRITERION_NAMES
 
@@ -66,6 +67,36 @@ def _safe_min_text(a: Any, b: Any) -> str:
         return ""
 
 
+def _format_observation_label(value: Any) -> Any:
+    """Format datetime-like index labels without inferring missing dates."""
+    if isinstance(value, (pd.Timestamp, np.datetime64)):
+        timestamp = pd.Timestamp(value)
+        if pd.isna(timestamp):
+            return None
+        if timestamp.time() == pd.Timestamp(0).time():
+            return timestamp.strftime("%Y-%m-%d")
+        return timestamp.isoformat(sep=" ")
+    if value is None or (np.isscalar(value) and pd.isna(value)):
+        return None
+    return value
+
+
+def _format_observation_labels(values: Any) -> list:
+    """Return observation labels as a display-friendly independent list."""
+    if values is None:
+        return []
+    if isinstance(values, str):
+        values = [values]
+    else:
+        try:
+            values = list(values)
+        except TypeError:
+            values = [values]
+    return [label for value in values
+            if (label := _format_observation_label(value)) is not None
+            and not (isinstance(label, str) and not label.strip())]
+
+
 def _format_breakpoints(x: Any) -> str:
     """
     Format breakpoint candidates in a compact readable form.
@@ -96,19 +127,6 @@ def _format_breakpoints(x: Any) -> str:
             pass
 
     return "[" + ", ".join(out) + "]" if out else "[]"
-
-
-def _format_break_types(result: Dict[str, Any]) -> Any:
-    break_types = result.get("break_types")
-
-    if break_types:
-        return break_types
-
-    break_type = result.get("break_type")
-    if break_type:
-        return break_type
-
-    return None
 
 
 def _format_grid_text(criteria: Any) -> str:
@@ -161,8 +179,8 @@ def _format_condition_text(
     if str(break_type).startswith("Type 1"):
         if min_text:
             return (
-                f"r_j,j+1 ({r_combined}) > "
-                f"min(r_j,r_j+1) ({min_text})"
+                f"r_{{j,j+1}} ({r_combined}) > "
+                f"min(r_j,r_{{j+1}}) ({min_text})"
                 + _format_grid_text(criteria)
             )
         return "Type 1 condition satisfied" + _format_grid_text(criteria)
@@ -170,8 +188,8 @@ def _format_condition_text(
     if str(break_type).startswith("Type 2"):
         if min_text:
             return (
-                f"r_j,j+1 ({r_combined}) <= "
-                f"min(r_j,r_j+1) ({min_text})"
+                f"r_{{j,j+1}} ({r_combined}) <= "
+                f"min(r_j,r_{{j+1}}) ({min_text})"
                 + _format_grid_text(criteria)
             )
         return "Type 2 condition satisfied" + _format_grid_text(criteria)
@@ -179,383 +197,386 @@ def _format_condition_text(
     return "No classification condition available" + _format_grid_text(criteria)
 
 
-def format_ic_path_table(ic_path: Any) -> str:
+class Summary:
+    """A structured, display-ready statistical summary.
+
+    Sections retain semantic labels and tabular data; text, HTML, and LaTeX
+    representations are generated from the same stored content.
     """
-    Format the information criterion path as readable text.
-    """
-    if ic_path is None or len(ic_path) == 0:
-        return "No information criterion path available."
+    width = 72
 
-    lines = []
+    def __init__(self, title):
+        self.title = str(title)
+        self.sections = []
 
-    for row in ic_path:
-        m = int(row.get("m", 0))
+    def add_pairs(self, heading, rows):
+        self.sections.append((heading, "pairs", list(rows)))
 
-        loss = row.get("loss", np.nan)
-        ic = row.get("IC", np.nan)
-        breaks = row.get("estimated_breakpoints", [])
+    def add_fields(self, heading, rows):
+        # Omit absent observation labels in every output format.
+        rows = [(name, value) for name, value in rows
+                if not ("breakpoint label" in name.lower()
+                        and (value is None or (isinstance(value, str) and value in ("None", "N/A", ""))
+                             or (isinstance(value, (list, tuple)) and not value)))]
+        self.sections.append((heading, "fields", rows))
 
-        loss_str = _format_float(loss)
-        ic_str = _format_float(ic)
-        breaks_str = _format_breakpoints(breaks)
+    def add_table(self, heading, headers, rows):
+        self.sections.append((heading, "table", (list(headers), [list(r) for r in rows])))
 
-        lines.append(
-            f"m={m}: U_NT={loss_str}, IC={ic_str}, breakpoints={breaks_str}"
+    def add_notes(self, notes):
+        if notes:
+            self.sections.append(("Notes", "notes", list(notes)))
+
+    def as_text(self):
+        lines = [self.title, "=" * self.width]
+        for heading, kind, content in self.sections:
+            lines.extend(["", heading])
+            if kind == "pairs":
+                for row in content:
+                    left, right = row
+                    ll, lv = left
+                    left_text = f"  {ll + ':':<17}{_display(lv)}"
+                    if right is not None:
+                        rl, rv = right
+                        right_text = f"{rl + ':':<20}{_display(rv)}"
+                        lines.append(f"{left_text:<39}{right_text}")
+                    else:
+                        lines.append(left_text)
+            elif kind == "fields":
+                label_width = max((len(str(k)) for k, _ in content), default=0) + 2
+                for label, value in content:
+                    lines.append(f"  {label + ':':<{label_width}}{_display(value)}")
+            elif kind == "table":
+                headers, rows = content
+                str_rows = [[_display(value) for value in r] for r in rows]
+                widths = [max(len(str(h)), *(len(r[i]) for r in str_rows))
+                          if str_rows else len(str(h)) for i, h in enumerate(headers)]
+                fmt = lambda r: "  " + "  ".join(str(x).ljust(w) for x, w in zip(r, widths)).rstrip()
+                lines.append(fmt(headers))
+                lines.append("  " + "-" * (sum(widths) + 2 * (len(widths) - 1)))
+                for row in str_rows:
+                    lines.append(fmt(row))
+            else:
+                lines.extend("  " + note for note in content)
+        return "\n".join(lines)
+
+    def as_html(self):
+        from html import escape
+        h = escape
+        parts = [f"<h3>{h(self.title)}</h3>"]
+        for heading, kind, content in self.sections:
+            parts.append(f"<h4>{h(heading)}</h4>")
+            if kind == "table":
+                headers, rows = content
+                parts.append("<table><thead><tr>" + "".join(f"<th>{h(str(x))}</th>" for x in headers) + "</tr></thead><tbody>")
+                for row in rows:
+                    parts.append("<tr>" + "".join(f"<td>{h(_display(x))}</td>" for x in row) + "</tr>")
+                parts.append("</tbody></table>")
+            elif kind == "notes":
+                parts.append("<p>" + " ".join(h(str(x)) for x in content) + "</p>")
+            else:
+                parts.append("<table>")
+                for row in content:
+                    fields = [row] if kind == "fields" else [x for x in row if x is not None]
+                    parts.append("<tr>" + "".join(f"<th>{h(str(k))}</th><td>{h(_display(v))}</td>" for k, v in fields) + "</tr>")
+                parts.append("</table>")
+        return "\n".join(parts)
+
+    def as_latex(self):
+        def esc(x):
+            mapping = {"\\": r"\textbackslash{}", "&": r"\&", "%": r"\%",
+                       "_": r"\_", "#": r"\#", "$": r"\$",
+                       "{": r"\{", "}": r"\}", "^": r"\textasciicircum{}",
+                       "~": r"\textasciitilde{}"}
+            return "".join(mapping.get(ch, ch) for ch in str(x))
+        lines = [r"\begin{center}", r"\textbf{" + esc(self.title) + "}", r"\end{center}"]
+        for heading, kind, content in self.sections:
+            lines.append(r"\paragraph{" + esc(heading) + "}")
+            if kind == "table":
+                headers, rows = content
+                lines.append(r"\begin{tabular}{" + "l" * len(headers) + "}")
+                lines.append(" & ".join(esc(x) for x in headers) + " " + "\\" * 2)
+                lines.append(r"\hline")
+                lines.extend(" & ".join(esc(_display(x)) for x in row) + " " + "\\" * 2 for row in rows)
+                lines.append(r"\end{tabular}")
+            elif kind == "notes":
+                lines.extend(esc(x) + r"\\" for x in content)
+            else:
+                lines.append(r"\begin{tabular}{ll}" if kind == "fields" else r"\begin{tabular}{llll}")
+                for row in content:
+                    vals = [row] if kind == "fields" else [row[0], row[1]]
+                    cells = []
+                    for field in vals:
+                        if field is None:
+                            cells.extend(["", ""])
+                        else:
+                            cells.extend([esc(str(field[0]) + ":"), esc(_display(field[1]))])
+                    lines.append(" & ".join(cells) + " " + "\\" * 2)
+                lines.append(r"\end{tabular}")
+        return "\n".join(lines)
+
+    def __str__(self):
+        return self.as_text()
+
+    def __repr__(self):
+        return self.as_text()
+
+
+def _display(value):
+    if value is None:
+        return "None"
+    if isinstance(value, np.generic):
+        value = value.item()
+    return str(value)
+
+
+def _rank_triplets(data, n):
+    """Return recorded rank triplets without inferring missing statistics."""
+    records = data.get("classification_criteria")
+    if isinstance(records, dict):
+        records = [records]
+    if not isinstance(records, (list, tuple)):
+        records = []
+    reg = data.get("regime_factors")
+    joint = data.get("combined_factors")
+    try:
+        reg = np.asarray(reg).reshape(-1).tolist() if reg is not None else []
+        joint = np.asarray(joint).reshape(-1).tolist() if joint is not None else []
+    except (ValueError, TypeError):
+        reg, joint = [], []
+    out = []
+    for i in range(n):
+        record = records[i] if i < len(records) and isinstance(records[i], dict) else {}
+        norm = {str(k).lower().replace(" ", "").replace("-", "_"): v for k, v in record.items()}
+        def pick(*keys):
+            for key in keys:
+                v = norm.get(key)
+                if v is not None:
+                    return v
+            return None
+        r0 = pick("r_j", "rj")
+        r1 = pick("r_j+1", "r_j1", "r_j_plus_1", "rj1")
+        rc = pick("r_j,j+1", "r_j_j+1", "r_jj1", "r_j_j1", "r_joint", "combined_rank")
+        if r0 is None and i < len(reg): r0 = reg[i]
+        if r1 is None and i + 1 < len(reg): r1 = reg[i + 1]
+        if rc is None and i < len(joint): rc = joint[i]
+        if n == 1:
+            r0 = r0 if r0 is not None else data.get("r_j", data.get("rj"))
+            r1 = r1 if r1 is not None else data.get("r_j+1", data.get("r_j1"))
+            rc = rc if rc is not None else data.get("r_j,j+1", data.get("combined_rank"))
+        out.append((r0, r1, rc))
+    return out
+
+
+def _types(data, n):
+    values = data.get("break_types")
+    if values is None:
+        values = [data.get("break_type")] if n == 1 else []
+    if isinstance(values, str):
+        values = [values]
+    try:
+        values = np.asarray(values, dtype=object).reshape(-1).tolist()
+    except (TypeError, ValueError):
+        values = []
+    return values if len(values) == n else [None] * n
+
+
+def _criterion(data):
+    value = data.get("factor_criterion")
+    if isinstance(value, (int, np.integer)):
+        return CRITERION_NAMES.get(int(value), str(value))
+    return value
+
+
+def _num(value):
+    return "N/A" if value is None else f"{float(value):.4f}"
+
+
+def _percent(value):
+    return f"{float(value) * 100:g}%" if value is not None else "N/A"
+
+
+def _class_table(summary, data, locations, multiple=False):
+    if (not data.get("classify", True) and not data.get("classification_completed", False)) or not locations:
+        return
+    types = _types(data, len(locations))
+    ranks = _rank_triplets(data, len(locations))
+    if not any(t is not None for t in types):
+        return
+    headers = (["Break"] if multiple else []) + ["Location", "Type", "r_j", "r_j+1", "r_j,j+1"]
+    rows = []
+    for i, loc in enumerate(locations):
+        rank = ["N/A" if x is None else x for x in ranks[i]]
+        row = ([i + 1] if multiple else []) + [loc, types[i] or "N/A", *rank]
+        rows.append(row)
+    summary.add_table("Break Classification", headers, rows)
+
+
+def format_single_break_result_summary(result: Dict[str, Any]) -> Summary:
+    """Build a compact, structured single-break report from stored results."""
+    test = result.get("test_type") == "lr_test"
+    report = Summary("SingleBreakQML LR Test Results" if test
+                     else "SingleBreakQML Estimation Results")
+    trim = result.get("trim_ratio")
+    report.add_pairs("Model Information", [
+        (("Sample size", f"T = {result.get('T')}, N = {result.get('N')}"),
+         ("Factor criterion", _criterion(result))),
+        (("Max factors", result.get("max_factors")),
+         ("Trimming ratio", f"{float(trim):.2f}" if trim is not None else "N/A")),
+        (("Search range", result.get("search_range")),
+         ("Estimated factors", result.get("estimated_factors"))),
+    ])
+    if test:
+        reject = result.get("reject_null")
+        candidate_breakpoint = result.get("candidate_breakpoint")
+        if candidate_breakpoint is None and reject is not None and bool(reject):
+            candidate_breakpoint = result.get("breakpoint")
+        accepted_breakpoint = (
+            result.get("breakpoint")
+            if reject is not None and bool(reject)
+            else None
         )
-
-    return "\n".join(lines)
-
-
-def format_break_classification_table(
-        result: Dict[str, Any],
-        mode: str = "joint"
-) -> Optional[str]:
-    """
-    Format breakpoint classification results as a console-style table.
-    """
-    break_types = result.get("break_types", [])
-
-    if not break_types:
-        return None
-
-    breakpoints = result.get("breakpoints", None)
-
-    if breakpoints is None:
-        break_point = result.get("break_point", None)
-        breakpoints = [] if break_point is None else [break_point]
-
-    labels = result.get("break_labels", None)
-
-    if labels is None:
-        break_label = result.get("break_label", None)
-        labels = [] if break_label is None else [break_label]
-
-    regime_factors = result.get("regime_factors", [])
-    combined_factors = result.get("combined_factors", [])
-    criteria_list = result.get("classification_criteria", [])
-
-    if mode == "joint":
-        title = "JOINT BREAKPOINT TYPE CLASSIFICATION"
-    elif mode == "joint_lr":
-        title = "JOINT LR BREAKPOINT TYPE CLASSIFICATION"
-    elif mode == "single":
-        title = "SINGLE BREAKPOINT TYPE CLASSIFICATION"
-    else:
-        title = "BREAKPOINT TYPE CLASSIFICATION"
-
-    sep = "-" * 112
-
-    break_w = 14
-    loc_w = 10
-    type_w = 23
-    r_left_w = 7
-    r_right_w = 8
-    r_combined_w = 10
-    condition_w = 55
-    label_w = 14
-
-    lines = [
-        sep,
-        title,
-        sep,
-        (
-            f"{'Break':<{break_w}}"
-            f"{'Location':<{loc_w}}"
-            f"{'Type':<{type_w}}"
-            f"{'r_j':<{r_left_w}}"
-            f"{'r_j+1':<{r_right_w}}"
-            f"{'r_j,j+1':<{r_combined_w}}"
-            f"{'Condition':<{condition_w}}"
-            f"{'Label':<{label_w}}"
-        )
-    ]
-
-    n_breaks = len(break_types)
-
-    for i in range(n_breaks):
-        bp = _get_list_item(breakpoints, i, "")
-        btype = _get_list_item(break_types, i, "")
-        label = _get_list_item(labels, i, "")
-
-        criteria = _get_list_item(criteria_list, i, {})
-
-        r_left = _get_dict_value(
-            criteria,
-            keys=[
-                "r_j",
-                "r_left",
-                "left_factor",
-                "left_factors",
-                "r_before",
-            ],
-            default=_get_list_item(regime_factors, i, "")
-        )
-
-        r_right = _get_dict_value(
-            criteria,
-            keys=[
-                "r_j_plus_1",
-                "r_right",
-                "right_factor",
-                "right_factors",
-                "r_after",
-            ],
-            default=_get_list_item(regime_factors, i + 1, "")
-        )
-
-        r_combined = _get_dict_value(
-            criteria,
-            keys=[
-                "r_j_j_plus_1",
-                "r_combined",
-                "combined_factor",
-                "combined_factors",
-                "r_merged",
-            ],
-            default=_get_list_item(combined_factors, i, "")
-        )
-
-        condition = _format_condition_text(
-            break_type=btype,
-            r_left=r_left,
-            r_right=r_right,
-            r_combined=r_combined,
-            criteria=criteria
-        )
-
-        lines.append(
-            f"{'Breakpoint ' + str(i + 1):<{break_w}}"
-            f"{str(bp):<{loc_w}}"
-            f"{str(btype):<{type_w}}"
-            f"{str(r_left):<{r_left_w}}"
-            f"{str(r_right):<{r_right_w}}"
-            f"{str(r_combined):<{r_combined_w}}"
-            f"{str(condition):<{condition_w}}"
-            f"{str(label):<{label_w}}"
-        )
-
-    lines.append(sep)
-
-    if result.get("break_type_summary") is not None:
-        summary = result["break_type_summary"]
-        lines.append(
-            "Break type summary: "
-            f"Type 1 = {summary.get('type1_count', 0)}, "
-            f"Type 2 = {summary.get('type2_count', 0)}, "
-            f"Other = {summary.get('other_count', 0)}"
-        )
-        lines.append(sep)
-
-    return "\n".join(lines)
-
-
-def format_single_break_summary(result: Dict[str, Any]) -> str:
-    """
-    Format summary text for SingleBreakQML results.
-    """
-    test_type = result.get("test_type", "")
-
-    if test_type == "lr_test":
-        title = "SingleBreakQML LR TEST SUMMARY"
-    elif test_type == "estimate_breakpoint":
-        title = "SingleBreakQML BREAKPOINT ESTIMATION SUMMARY"
-    else:
-        title = "SingleBreakQML SUMMARY"
-
-    criterion_name = CRITERION_NAMES.get(
-        result.get("factor_criterion", 0),
-        "IC1"
-    )
-
-    lines = [
-        "=" * 70,
-        title,
-        "=" * 70,
-        f"Test type: {result.get('test_type')}",
-        f"Sample size: T = {result.get('T')}, N = {result.get('N')}",
-    ]
-
-    if result.get("search_range") is not None:
-        lines.append(
-            f"Search range: {result.get('search_range')}"
-        )
-
-    if result.get("estimated_factors") is not None:
-        lines.append(
-            f"Estimated number of factors: {result.get('estimated_factors')}"
-        )
-
-    lines.append(
-        f"Factor criterion: {criterion_name}"
-    )
-
-    if result.get("estimated_break_candidate") is not None:
-        lines.append(
-            f"Estimated break candidate: {result.get('estimated_break_candidate')}"
-        )
-
-    if result.get("estimated_break_candidate_label") is not None:
-        lines.append(
-            "Estimated break candidate label: "
-            f"{result.get('estimated_break_candidate_label')}"
-        )
-
-    lines.append(
-        f"Accepted breakpoint: {result.get('break_point')}"
-    )
-
-    if result.get("break_label") is not None:
-        lines.append(
-            f"Accepted breakpoint label: {result.get('break_label')}"
-        )
-
-    lines.append(
-        f"Break type: {result.get('break_type')}"
-    )
-
-    if result.get("reject_null") is not None:
-        lines.append(
-            f"Reject null hypothesis of no break: {result.get('reject_null')}"
-        )
-
-    if result.get("test_statistic") is not None:
-        lines.append(
-            f"Test statistic: {float(result.get('test_statistic')):.4f}"
-        )
-
-    if result.get("critical_value") is not None:
-        if result.get("significance_level") is not None:
-            lines.append(
-                "Critical value "
-                f"(alpha = {result.get('significance_level')}): "
-                f"{float(result.get('critical_value')):.4f}"
-            )
-        else:
-            lines.append(
-                f"Critical value: {float(result.get('critical_value')):.4f}"
-            )
-
-    if result.get("min_regime_length") is not None:
-        lines.append(
-            f"Classification min regime length: {result.get('min_regime_length')}"
-        )
-
-    lines.append("=" * 70)
-
-    classification_table = format_break_classification_table(
-        result=result,
-        mode="single"
-    )
-
-    if classification_table is not None:
-        lines.append(classification_table)
-        lines.append("=" * 70)
-
-    return "\n".join(lines)
-
-
-def format_multi_break_summary(
-        result: Dict[str, Any],
-        mode: str = "joint"
-) -> str:
-    """
-    Format summary text for MultiBreakQML results.
-    """
-    criterion_name = CRITERION_NAMES.get(
-        result.get("factor_criterion", 0),
-        "IC1"
-    )
-
-    T = result.get("T")
-    N = result.get("N")
-
-    if mode == "joint":
-        lines = [
-            "=" * 70,
-            "MultiBreakQML JOINT ESTIMATION SUMMARY",
-            "=" * 70,
-            f"Test type: {result['test_type']}",
-            f"Sample size: T = {T}, N = {N}",
-            f"Allowed breaks: max={result['max_break']}, min={result['min_break']}",
-            (
-                f"Max factors: {result['max_factors']}, "
-                f"trim_ratio={result['trim_ratio']} "
-                f"(min_segment_length={result['min_segment_length']})"
-            ),
-            f"Estimated number of factors: {result.get('estimated_factors')}",
-            f"Detected breakpoints: {result['breakpoints']}",
-            f"Break types: {_format_break_types(result)}",
+        breakpoint_fields = [
+            ("Candidate breakpoint under H1",
+             candidate_breakpoint if candidate_breakpoint is not None else "None"),
         ]
+        candidate_label = (
+            _format_observation_label(result.get("candidate_break_label"))
+            if candidate_breakpoint is not None else None
+        )
+        if candidate_label is not None:
+            breakpoint_fields.append(("Candidate breakpoint label", candidate_label))
+        breakpoint_fields.append((
+            "Accepted breakpoint",
+            accepted_breakpoint if accepted_breakpoint is not None else "None",
+        ))
+        accepted_label = (
+            _format_observation_label(result.get("break_label"))
+            if accepted_breakpoint is not None else None
+        )
+        if accepted_label is not None:
+            breakpoint_fields.append(("Accepted breakpoint label", accepted_label))
+        report.add_fields("Breakpoint Estimation", breakpoint_fields)
 
-        if result.get("break_labels") is not None:
-            lines.append(f"Breakpoint labels: {result['break_labels']}")
-
-        lines.extend([
-            f"Number of breaks: {result['n_breaks']}",
-            f"Factor criterion: {criterion_name}",
+        decision = ("Not available" if reject is None else
+                    "Reject H0" if bool(reject) else "Do not reject H0")
+        report.add_fields("Hypothesis Test", [
+            ("Null hypothesis", "No structural break"),
+            ("LR statistic", _num(result.get("test_statistic"))),
+            (f"Critical value ({_percent(result.get('significance_level'))})",
+             _num(result.get("critical_value"))),
+            ("Decision", decision),
         ])
-
-        if "ic_path" in result:
-            lines.extend([
-                "",
-                "Information criterion path:",
-                format_ic_path_table(result.get("ic_path")),
-                ""
-            ])
-
-    elif mode == "joint_lr":
-        lines = [
-            "=" * 70,
-            "MultiBreakQML JOINT SUP-LR TEST SUMMARY",
-            "=" * 70,
-            f"Test type: {result['test_type']}",
-            f"Sample size: T = {T}, N = {N}",
-            f"Prespecified number of breaks: {result['n_breaks']}",
-        ]
-
-        if result.get("max_break") is not None:
-            lines.append(f"Allowed breaks: max={result['max_break']}")
-
-        lines.extend([
-            (
-                f"Max factors: {result.get('max_factors')}, "
-                f"trim_ratio={result['trim_ratio']} "
-                f"(min_segment_length={result['min_segment_length']})"
-            ),
-            f"Estimated number of factors: {result.get('estimated_factors')}",
-            f"Factor criterion: {criterion_name}",
-            f"Detected breakpoints: {result['breakpoints']}",
-            f"Break types: {_format_break_types(result)}",
-        ])
-
-        if result.get("break_labels") is not None:
-            lines.append(f"Breakpoint labels: {result['break_labels']}")
-
-        lines.extend([
-            f"Reject null hypothesis of no break: {result['reject_null']}",
-            f"Test statistic: {float(result['test_statistic']):.4f}",
-            (
-                f"Critical value (alpha = {result['significance_level']}): "
-                f"{float(result['critical_value']):.4f}"
-            ),
-            f"Monte Carlo replications: {result.get('monte_carlo_replications')}",
-        ])
-
-        if result.get("random_state") is not None:
-            lines.append(f"Random state: {result['random_state']}")
-
     else:
-        raise ValueError("mode must be 'joint' or 'joint_lr'.")
+        breakpoint_fields = [
+            ("Estimated breakpoints", result.get("breakpoint")),
+        ]
+        breakpoint_label = _format_observation_label(result.get("break_label"))
+        if breakpoint_label is not None:
+            breakpoint_fields.append(("Breakpoint label", breakpoint_label))
+        report.add_fields("Breakpoint Estimation", breakpoint_fields)
 
-    lines.append("=" * 70)
+    loc = result.get("breakpoint")
+    if test and not bool(result.get("reject_null")):
+        loc = None
+    if loc is not None:
+        _class_table(report, result, [loc])
+    n_sim = result.get("monte_carlo_replications")
+    if test and n_sim is not None:
+        report.add_notes([
+            f"Critical value computed using {n_sim} Monte Carlo replications."
+        ])
+    return report
 
-    classification_table = format_break_classification_table(
-        result=result,
-        mode=mode
-    )
 
-    if classification_table is not None:
-        lines.append(classification_table)
-        lines.append("=" * 70)
+def format_multi_break_result_summary(result: Dict[str, Any]) -> Summary:
+    """Build a compact joint-QML or joint sup-LR report from stored results."""
+    test_type = str(result.get("test_type", "")).lower()
+    if "joint_sup_lr_profile" in test_type:
+        raise ValueError("A joint LR profile is not a hypothesis-test result.")
+    is_lr = ("joint_sup_lr" in test_type or result.get("test_statistic") is not None
+             or result.get("critical_value") is not None)
+    report = Summary("MultiBreakQML Joint LR Test Results" if is_lr
+                     else "MultiBreakQML Joint Estimation Results")
+    trim = result.get("trim_ratio")
+    report.add_pairs("Model Information", [
+        (("Sample size", f"T = {result.get('T')}, N = {result.get('N')}"),
+         ("Factor criterion", _criterion(result))),
+        (("Max factors", result.get("max_factors")),
+         ("Maximum breaks", result.get("max_break"))),
+        (("Trimming ratio", f"{float(trim):.2f}" if trim is not None else "N/A"),
+         ("Estimated factors", result.get("estimated_factors"))),
+    ])
 
-    return "\n".join(lines)
+    def _as_list(value: Any) -> list:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value]
+        try:
+            return np.asarray(value, dtype=object).reshape(-1).tolist()
+        except (TypeError, ValueError):
+            return []
+
+    accepted_locations = _as_list(result.get("breakpoints"))
+    accepted_labels = _format_observation_labels(_as_list(result.get("break_labels")))
+    n_breaks = result.get("n_breaks")
+
+    if is_lr:
+        candidate_locations = _as_list(
+            result.get("candidate_breakpoints", result.get("breakpoints"))
+        )
+        if n_breaks is None:
+            n_breaks = len(candidate_locations)
+        alpha = result.get("significance_level", result.get("alpha"))
+        reject = result.get("reject_null")
+        decision = ("Not available" if reject is None else
+                    "Reject H0" if bool(reject) else "Do not reject H0")
+        report.add_fields("Hypothesis Test", [
+            ("Null hypothesis", "No structural break"),
+            ("Alternative hypothesis", f"Exactly {n_breaks} structural {'break' if n_breaks == 1 else 'breaks'}"),
+            ("LR statistic", _num(result.get("test_statistic"))),
+            (f"Critical value ({_percent(alpha)})", _num(result.get("critical_value"))),
+            ("Decision", decision),
+        ])
+        # Candidate is the H1-optimal partition. Accepted is populated only
+        # when the joint LR test rejects the null hypothesis.
+        accepted_for_report = (
+            accepted_locations
+            if reject is not None and bool(reject)
+            else []
+        )
+        candidate_labels = _format_observation_labels(
+            _as_list(result.get("candidate_break_labels"))
+        )
+        accepted_labels_for_report = (
+            accepted_labels if accepted_for_report else None
+        )
+        breakpoint_fields = [
+            ("Candidate breakpoints under H1",
+             candidate_locations if candidate_locations else "None"),
+        ]
+        if candidate_labels and candidate_locations:
+            breakpoint_fields.append(("Candidate breakpoint labels", candidate_labels))
+        breakpoint_fields.append((
+            "Accepted breakpoints",
+            accepted_for_report if accepted_for_report else "None",
+        ))
+        if accepted_labels_for_report:
+            breakpoint_fields.append(("Accepted breakpoint labels", accepted_labels_for_report))
+        report.add_fields("Breakpoint Estimation", breakpoint_fields)
+        if accepted_for_report:
+            _class_table(report, result, accepted_for_report, multiple=True)
+        n_sim = result.get("monte_carlo_replications", result.get("n_sim"))
+        if n_sim is not None:
+            report.add_notes([f"Critical value computed using {n_sim} Monte Carlo replications."])
+    else:
+        if n_breaks is None:
+            n_breaks = len(accepted_locations)
+        report.add_fields("Breakpoint Estimation", [
+            ("Number of breaks", n_breaks),
+            ("Estimated breakpoints", accepted_locations if accepted_locations else "None"),
+            ("Breakpoint labels", accepted_labels if accepted_labels else "None"),
+        ])
+        _class_table(report, result, accepted_locations, multiple=True)
+    return report

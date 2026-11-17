@@ -49,10 +49,10 @@ def simulate_no_break_factor_data(
     return X, factors, errors, loading
 
 
-def _print_prespecified_lr_result(model, true_breakpoints):
+def _print_prespecified_lr_result(result, true_breakpoints):
     """Print the joint LR decision using dedicated public methods."""
-    rejected = model.is_rejected()
-    candidate_breakpoints = model.get_breakpoints(mode="joint_lr")
+    rejected = result.reject_null
+    candidate_breakpoints = result.candidate_breakpoints
 
     print("Reject the no-break null:", rejected)
     print("Structural breaks detected:", rejected)
@@ -174,10 +174,10 @@ def replication_multiple_breaks(
     res_joint = model.estimate_breaks_jointly(
         min_break=0,
         classify=True,
-        verbose=True
     )
+    print(res_joint.summary())
 
-    fig, ax = model.plot_mqml_profile(show=False)
+    fig, ax = res_joint.plot_mqml_profile(show=False)
     plt.close(fig)
 
     # ============================================================
@@ -186,7 +186,7 @@ def replication_multiple_breaks(
 
     print("\nPreparing information criterion path...")
 
-    ic_table = model.get_ic_path()
+    ic_table = res_joint.ic_path
 
     if ic_table.empty:
         raise ValueError(
@@ -252,19 +252,12 @@ def replication_multiple_breaks(
         n_sim=lr_n_sim,
         random_state=lr_random_state,
         classify=True,
-        verbose=True
     )
-    _print_prespecified_lr_result(lr_model, [t1, t2, t3])
+    print(res_lr.summary())
+    _print_prespecified_lr_result(res_lr, [t1, t2, t3])
 
-    fig, ax = lr_model.plot_joint_lr_profile(
-        alpha=0.05,
-        n_sim=lr_n_sim,
-        random_state=lr_random_state,
-        show=False,
-    )
-    plt.close(fig)
 
-    res_joint["joint_sup_lr_test"] = res_lr
+    replication_results = {"joint": res_joint, "joint_sup_lr_test": res_lr}
 
     # --------------------------------------------------------------
     # No-break control: run the same multiple-break LR test on a
@@ -296,19 +289,12 @@ def replication_multiple_breaks(
         n_sim=lr_n_sim,
         random_state=lr_random_state,
         classify=False,
-        verbose=True
     )
-    _print_prespecified_lr_result(null_model, [])
+    print(res_lr_null.summary())
+    _print_prespecified_lr_result(res_lr_null, [])
 
-    fig, ax = null_model.plot_joint_lr_profile(
-        alpha=0.05,
-        n_sim=lr_n_sim,
-        random_state=lr_random_state,
-        show=False,
-    )
-    plt.close(fig)
 
-    res_joint["joint_sup_lr_test_no_break"] = res_lr_null
+    replication_results["joint_sup_lr_test_no_break"] = res_lr_null
 
     # ============================================================
     # 10. Final summary
@@ -316,24 +302,24 @@ def replication_multiple_breaks(
 
     print("\nFinal multiple-break replication results:")
     print("True breakpoints:", [t1, t2, t3])
-    print("Joint estimated breakpoints:", model.get_breakpoints())
-    print("Joint estimated number of breaks:", model.get_n_breaks())
+    print("Joint estimated breakpoints:", res_joint.breakpoints)
+    print("Joint estimated number of breaks:", res_joint.n_breaks)
 
-    lr_rejected = lr_model.is_rejected()
+    lr_rejected = res_lr.reject_null
     print("joint_sup_lr_test rejects no-break null:", lr_rejected)
     print(
         "joint_sup_lr_test estimated breakpoints:",
-        lr_model.get_breakpoints(mode="joint_lr")
+        res_lr.candidate_breakpoints
     )
 
-    null_rejected = null_model.is_rejected()
+    null_rejected = res_lr_null.reject_null
     print("No-break joint_sup_lr_test rejects no-break null:", null_rejected)
     print(
         "No-break joint_sup_lr_test estimated breakpoints:",
-        null_model.get_breakpoints(mode="joint_lr") if null_rejected else []
+        res_lr_null.candidate_breakpoints if null_rejected else []
     )
 
-    return res_joint, ic_table_for_paper
+    return replication_results, ic_table_for_paper
 
 
 if __name__ == "__main__":

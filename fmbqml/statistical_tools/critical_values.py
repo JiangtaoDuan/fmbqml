@@ -17,7 +17,7 @@ multiple-break test estimates the HAC matrix itself and passes it to
 that implementation remains explicit.
 """
 
-from numbers import Real
+from numbers import Integral, Real
 from typing import Optional, Tuple
 
 import numpy as np
@@ -101,9 +101,13 @@ def factor_long_run_covariance(F_hat: np.ndarray, project_psd: bool = False) -> 
 
 
 def _validate_n_sim(n_sim: int) -> int:
-    if isinstance(n_sim, bool) or not isinstance(n_sim, int) or n_sim <= 0:
-        raise ValueError(f"n_sim must be a positive integer. Got {n_sim}.")
-    return n_sim
+    if (
+        isinstance(n_sim, (bool, np.bool_))
+        or not isinstance(n_sim, Integral)
+        or n_sim <= 0
+    ):
+        raise ValueError("n_sim must be a positive integer.")
+    return int(n_sim)
 
 
 def _critical_values_from_simulated(
@@ -362,8 +366,16 @@ def joint_sup_lr_cv(
     n_sim = _validate_n_sim(n_sim)
     omega = np.asarray(omega, dtype=float)
     dimension = omega.shape[0]
-    min_length = int(np.ceil(grid_size * trim_ratio))
+    min_length = max(1, int(np.ceil(grid_size * trim_ratio)))
     n_segments = n_breaks + 1
+
+    # The trimming rule must leave enough grid intervals for every regime.
+    if n_segments * min_length > grid_size:
+        raise ValueError(
+            "The requested number of breaks and trimming condition "
+            "do not admit a feasible partition."
+        )
+
     fractions = np.arange(grid_size + 1) / grid_size
     base_rng = np.random.default_rng(random_state)
     seeds = base_rng.integers(
@@ -403,51 +415,45 @@ def joint_sup_lr_cv(
     return critical_values, simulated
 
 
+
 def select_critical_value(cv, alpha: float) -> float:
     """Select the critical value corresponding to a significance level.
 
     Parameters
     ----------
     cv : array_like
-        At least three critical values ordered for significance levels 10%,
-        5%, and 1%.
+        Critical values ordered for significance levels 10%, 5%, and 1%.
     alpha : {0.10, 0.05, 0.01}
         Requested significance level.
 
     Returns
     -------
     float
-        Selected finite critical value.
+        Selected critical value.
 
     Raises
     ------
     ValueError
-        If ``alpha`` is unsupported, fewer than three critical values are
-        supplied, or the selected value is not finite.
+        If alpha is not a supported significance level.
     """
-    if isinstance(alpha, bool) or not isinstance(alpha, Real):
+    if isinstance(alpha, (bool, np.bool_)) or not isinstance(alpha, Real):
         raise ValueError(
-            f"alpha must be one of 0.10, 0.05, or 0.01. Got alpha={alpha}."
+            "alpha must be one of 0.10, 0.05, or 0.01."
         )
 
-    alpha = float(alpha)
     alpha_map = {0.10: 0, 0.05: 1, 0.01: 2}
+
+    alpha = float(alpha)
+
     if alpha not in alpha_map:
         raise ValueError(
-            f"alpha must be one of 0.10, 0.05, or 0.01. Got alpha={alpha}."
+            "alpha must be one of 0.10, 0.05, or 0.01."
         )
 
     values = np.asarray(cv, dtype=float).reshape(-1)
-    if values.size < 3:
-        raise ValueError(
-            "cv must contain at least three critical values ordered as "
-            "alpha = (0.10, 0.05, 0.01)."
-        )
 
-    value = values[alpha_map[alpha]]
-    if not np.isfinite(value):
-        raise ValueError(f"The selected critical value is not finite. Got {value}.")
-    return float(value)
+    return float(values[alpha_map[alpha]])
+
 
 
 __all__ = [

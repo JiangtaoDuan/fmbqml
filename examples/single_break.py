@@ -73,21 +73,21 @@ def replication_single_break(n_sim=5000):
     result_lr = model.lr_test(
         alpha=0.01,
         classify=True,
-        verbose=True,
         n_sim=n_sim,
         random_state=SEED_SINGLE_BREAK_CV
     )
+    print(result_lr.summary())
 
     # Retrieve LR test results through dedicated public methods
-    # before the subsequent estimation overwrites model state.
-    break_case_rejected = model.is_rejected()
-    break_case_breakpoint = model.get_breakpoint()
+    # as an independent snapshot of the LR test.
+    break_case_rejected = result_lr.reject_null
+    break_case_breakpoint = result_lr.breakpoint
 
     # ============================================================
     # Save LR profile figure without opening a GUI window
     # ============================================================
 
-    fig, ax = model.plot_lr_profile(
+    fig, ax = result_lr.plot_lr_profile(
         true_break=breakpoint,
         show=False
     )
@@ -97,17 +97,17 @@ def replication_single_break(n_sim=5000):
 
     result_qml = model.estimate_breakpoint(
         classify=True,
-        verbose=True
     )
+    print(result_qml.summary())
 
     # Retrieve the QML breakpoint estimate.
-    qml_breakpoint = model.get_breakpoint()
+    qml_breakpoint = result_qml.breakpoint
 
     # ============================================================
     # Save QML objective profile figure without opening a GUI window
     # ============================================================
 
-    fig, ax = model.plot_qml_profile(
+    fig, ax = result_qml.plot_qml_profile(
         true_break=breakpoint,
         show=False
     )
@@ -141,16 +141,16 @@ def replication_single_break(n_sim=5000):
     null_result = null_model.lr_test(
         alpha=0.01,
         classify=False,
-        verbose=True,
         n_sim=n_sim,
         random_state=SEED_SINGLE_BREAK_CV
     )
+    print(null_result.summary())
 
     # Retrieve no-break control results through public methods.
-    no_break_rejected = null_model.is_rejected()
-    no_break_breakpoint = null_model.get_breakpoint()
+    no_break_rejected = null_result.reject_null
+    no_break_breakpoint = null_result.breakpoint
 
-    fig, ax = null_model.plot_lr_profile(show=False)
+    fig, ax = null_result.plot_lr_profile(show=False)
     plt.close(fig)
 
     # ============================================================

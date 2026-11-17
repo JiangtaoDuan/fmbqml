@@ -67,7 +67,16 @@ def classify_breakpoint_result(
     if breakpoints is None:
         breakpoints = []
     else:
-        breakpoints = [int(bp) for bp in breakpoints]
+        if isinstance(breakpoints, (str, bytes)):
+            raise TypeError(
+                "breakpoints must be a sequence of integer locations, not a string."
+            )
+        try:
+            breakpoints = list(breakpoints)
+        except TypeError as exc:
+            raise TypeError(
+                "breakpoints must be a sequence of integer locations."
+            ) from exc
 
     if len(breakpoints) == 0:
         classification = {
@@ -139,6 +148,7 @@ def classify_breakpoint_result(
     break_types = classification.get("break_types", [])
 
     updated_result["break_types"] = break_types
+    updated_result["classification_completed"] = True
     updated_result["regime_factors"] = classification.get("regime_factors", [])
     updated_result["combined_factors"] = classification.get("combined_factors", [])
     updated_result["classification_criteria"] = classification.get(

@@ -1,3 +1,4 @@
+
 """Brownian-motion simulation shared by break tests."""
 
 import numpy as np
@@ -8,12 +9,23 @@ def simulate_brownian_motion(t, n, dim, rng=None):
     if rng is None:
         rng = np.random.default_rng()
 
-    path = np.zeros((dim, round(t * n)))
-    path[:, 0] = rng.standard_normal(dim) / np.sqrt(n)
-    for step in range(1, round(t * n)):
-        path[:, step] = (
-            path[:, step - 1] + rng.standard_normal(dim) / np.sqrt(n)
+    grid_points = round(t * n)
+
+    if grid_points < 1:
+        raise ValueError(
+            "The requested time grid has no simulation points."
         )
+
+    path = np.zeros((dim, grid_points))
+
+    path[:, 0] = rng.standard_normal(dim) / np.sqrt(n)
+
+    for step in range(1, grid_points):
+        path[:, step] = (
+            path[:, step - 1]
+            + rng.standard_normal(dim) / np.sqrt(n)
+        )
+
     return path
 
 

@@ -1,62 +1,102 @@
-"""Numerically stable log-determinant evaluation."""
+"""Cholesky log-determinants with bounded diagonal-jitter fallback."""
+
+from numbers import Real
 
 import numpy as np
 
 
-def safe_logdet(A, eps=1e-8, max_tries=8):
-    """
-    Compute a numerically stable log-determinant.
+def safe_logdet(
+        A,
+        *,
+        symmetry_rtol: float = 1e-10,
+        symmetry_atol: float = 0.0,
+) -> float:
+    """Compute a symmetric matrix log-determinant using Cholesky factorization.
 
-    The matrix is first symmetrized to remove small floating-point
-    asymmetries. The function first tries to compute the log-determinant of
-    the original matrix using numpy.linalg.slogdet. A diagonal jitter is added
-    only if the unregularized calculation is not numerically reliable. As a
-    final fallback, the log-determinant is computed from lower-bounded
-    eigenvalues.
+    The unmodified matrix is attempted first. Only if that factorization fails,
+    retry with diagonal jitter of 1e-8, 1e-7, and 1e-6, each added to the
+    ORIGINAL matrix. A fallback result is the log determinant of A + jitter*I,
+    not of A itself. The jitter bounds are fixed numerical implementation
+    settings; they are not estimated statistical parameters.
 
     Parameters
     ----------
-    A : np.ndarray
-        Input square matrix.
-    eps : float, default=1e-8
-        Initial positive regularization constant added to the diagonal.
-    max_tries : int, default=8
-        Maximum number of jitter-increasing attempts.
+    A : array-like
+        Non-empty square real-valued matrix.
+    symmetry_rtol : float, default=1e-10
+        Relative tolerance for floating-point asymmetry.
+    symmetry_atol : float, default=0.0
+        Absolute tolerance for floating-point asymmetry.
 
     Returns
     -------
     float
-        Numerically stable log-determinant value.
+        Natural log determinant of A, or of the jittered matrix on fallback.
+
+    Raises
+    ------
+    TypeError
+        If the input cannot be converted to a real numeric array.
+    ValueError
+        If the input is complex, non-square, empty, non-finite, materially
+        non-symmetric, or a symmetry tolerance is invalid.
+    numpy.linalg.LinAlgError
+        If Cholesky fails even after the bounded jitter attempts.
     """
-    A = np.asarray(A, dtype=float)
+    for tolerance in (symmetry_rtol, symmetry_atol):
+        if (isinstance(tolerance, (bool, np.bool_))
+                or not isinstance(tolerance, Real)
+                or not np.isfinite(tolerance) or tolerance < 0):
+            raise ValueError("Symmetry tolerances must be finite non-negative real scalars.")
 
-    if A.ndim != 2 or A.shape[0] != A.shape[1]:
+    try:
+        raw = np.asarray(A)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise TypeError("A must be convertible to a real numeric array.") from exc
+
+    contains_complex = np.iscomplexobj(raw)
+    if not contains_complex and raw.dtype.kind == "O":
+        contains_complex = any(np.iscomplexobj(value) for value in raw.flat)
+    if contains_complex:
+        raise ValueError("A must be real-valued; complex input is not supported.")
+
+    try:
+        matrix = np.asarray(raw, dtype=float)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise TypeError("A must be convertible to a real numeric array.") from exc
+
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
         raise ValueError("A must be a square matrix.")
+    if matrix.shape[0] == 0:
+        raise ValueError("A must be a non-empty square matrix.")
+    if not np.isfinite(matrix).all():
+        raise ValueError("A contains NaN or Inf.")
 
-    n = A.shape[0]
+    scale = float(np.max(np.abs(matrix)))
+    asymmetry = float(np.max(np.abs(matrix - matrix.T)))
+    symmetry_limit = symmetry_atol + symmetry_rtol * scale
+    if asymmetry > symmetry_limit:
+        raise ValueError(
+            "A must be symmetric within the specified numerical tolerance."
+        )
 
-    # Remove small numerical asymmetry.
-    A = 0.5 * (A + A.T)
+    matrix = 0.5 * (matrix + matrix.T)
 
-    sign, logdet = np.linalg.slogdet(A)
+    identity = np.eye(matrix.shape[0], dtype=float)
+    for jitter in (0.0, 1e-8, 1e-7, 1e-6):
+        candidate = matrix if jitter == 0.0 else matrix + jitter * identity
+        try:
+            lower = np.linalg.cholesky(candidate)
+        except np.linalg.LinAlgError:
+            continue
 
-    if sign > 0 and np.isfinite(logdet):
-        return float(logdet)
-
-    jitter = eps
-
-    for _ in range(max_tries):
-        A_reg = A + jitter * np.eye(n)
-
-        sign, logdet = np.linalg.slogdet(A_reg)
-
-        if sign > 0 and np.isfinite(logdet):
+        logdet = 2.0 * np.sum(np.log(np.diag(lower)))
+        if np.isfinite(logdet):
             return float(logdet)
 
-        jitter *= 10.0
+    raise np.linalg.LinAlgError(
+        "Cholesky log determinant failed with or without bounded diagonal jitter."
+    )
 
-    # Final fallback: eigenvalue truncation.
-    eigvals = np.linalg.eigvalsh(A)
-    eigvals = np.clip(eigvals, eps, None)
 
-    return float(np.sum(np.log(eigvals)))
+__all__ = ["safe_logdet"]

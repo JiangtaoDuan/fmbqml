@@ -1,5 +1,5 @@
 """Estimation and testing of a single structural break."""
 
-from .single_break_qml import SingleBreakQML
+from .model import SingleBreakQML
 
 __all__ = ["SingleBreakQML"]

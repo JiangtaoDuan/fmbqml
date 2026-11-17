@@ -15,19 +15,19 @@ from .breakpoint_utils import (
 )
 
 from .formatting import (
-    format_single_break_summary,
-    format_multi_break_summary,
-    format_ic_path_table,
+    Summary,
+    format_single_break_result_summary,
+    format_multi_break_result_summary,
 )
 
 from .plotting import (
-    plot_joint_lr_profile,
     plot_lr_profile,
     plot_qml_profile,
     plot_mqml_profile,
 )
 
 from .data_input import (
+    validate_real_input,
     prepare_input_data,
     prepare_multi_input_data,
 )
@@ -37,11 +37,11 @@ from .partition import optimize_additive_partition
 
 from .validation import (
     validate_alpha,
-    validate_input_matrix,
-    validate_joint_sup_lr_arguments,
+    validate_boolean,
     validate_max_factors,
     validate_nonnegative_integer,
     validate_positive_integer,
+    validate_random_state,
     validate_trim_ratio,
 )
 
@@ -54,15 +54,15 @@ __all__ = [
     "map_breakpoint_to_label",
     "map_breakpoints_to_labels",
 
-    "format_single_break_summary",
-    "format_multi_break_summary",
-    "format_ic_path_table",
+    "Summary",
+    "format_single_break_result_summary",
+    "format_multi_break_result_summary",
 
-    "plot_joint_lr_profile",
     "plot_lr_profile",
     "plot_qml_profile",
     "plot_mqml_profile",
 
+    "validate_real_input",
     "prepare_input_data",
     "prepare_multi_input_data",
 
@@ -70,10 +70,10 @@ __all__ = [
     "optimize_additive_partition",
 
     "validate_alpha",
-    "validate_input_matrix",
-    "validate_joint_sup_lr_arguments",
+    "validate_boolean",
     "validate_max_factors",
     "validate_nonnegative_integer",
     "validate_positive_integer",
+    "validate_random_state",
     "validate_trim_ratio",
 ]

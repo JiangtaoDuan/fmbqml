@@ -1,5 +1,6 @@
 """Generic dynamic-programming tools for additive partitions."""
 
+from numbers import Integral
 from typing import List, Tuple
 
 import numpy as np
@@ -15,8 +16,14 @@ def optimize_additive_partition(
     values = np.asarray(values, dtype=float)
     if values.ndim != 2 or values.shape[0] != values.shape[1]:
         raise ValueError("values must be a square matrix.")
-    if n_segments < 1 or min_length < 1:
-        raise ValueError("n_segments and min_length must be positive integers.")
+    if np.isnan(values).any():
+        raise ValueError("values must not contain NaN.")
+    for name, value in (("n_segments", n_segments), ("min_length", min_length)):
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, Integral):
+            raise TypeError(f"{name} must be a positive integer.")
+        if value < 1:
+            raise ValueError(f"{name} must be a positive integer.")
+    n_segments, min_length = int(n_segments), int(min_length)
 
     final_point = values.shape[0] - 1
     if n_segments * min_length > final_point:

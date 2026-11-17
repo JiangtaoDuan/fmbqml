@@ -1,212 +1,187 @@
+# fmbqml
 
-# fmbqml: Structural Break Analysis in High-Dimensional Factor Models
+[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
+[![PyPI version](https://img.shields.io/pypi/v/fmbqml)](https://pypi.org/project/fmbqml/)
+[![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)](LICENSE.txt)
+## Introduction
 
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
-[![PyPI version](https://img.shields.io/pypi/v/fmbqml.svg)](https://pypi.org/project/fmbqml/)
-[![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
+`fmbqml` is a Python package for detecting and estimating structural breaks in high-dimensional factor models using quasi-maximum likelihood (QML) methods. It provides procedures for single-break testing and estimation, joint multiple-break estimation, joint sup-LR testing, and break-type classification.
 
-`fmbqml` is a Python package for quasi-maximum-likelihood analysis of structural breaks in high-dimensional factor models. It provides tools for single-break testing and estimation, joint multiple-break estimation, sup-LR testing, factor-number selection, break-type classification, and diagnostic plots.
+The package accepts two-dimensional NumPy arrays and pandas DataFrames, with time observations in rows and variables in columns. It is designed for researchers and practitioners studying structural changes in high-dimensional panel data.
 
-## Links
+## Features
 
-- [Source code](https://github.com/JiangtaoDuan/fmbqml)
-- [Issue tracker](https://github.com/JiangtaoDuan/fmbqml/issues)
+| Feature | Description |
+| --- | --- |
+| Single-break LR test | Tests the null hypothesis of no structural break against a single-break alternative. Candidate breakpoints under the alternative are retained in the result summary; a breakpoint is reported as accepted only when the null is rejected. |
+| Single-break QML estimation | Directly estimates a breakpoint under the assumption that one break is present, without performing an LR test. |
+| Multiple-break QML estimation | Jointly selects the number and locations of breaks using a QML information criterion. The no-break specification can also be selected. |
+| Joint sup-LR test | Tests the no-break null against an alternative with a prespecified number of breaks. |
+| Break-type classification | Optionally classifies estimated or tested breakpoints. |
+| Result reporting and plots | Provides concise printed results, detailed statistical summaries, dictionary representations, and diagnostic plots of estimation and test profiles. |
 
 ## Installation
 
-Install the package from PyPI with:
+Install the released package from PyPI:
 
 ```bash
 python -m pip install fmbqml
 ```
 
-For development from a source checkout, use:
+The package requires Python 3.8 or later. Its runtime dependencies are NumPy, SciPy, pandas, Matplotlib, and joblib.
+
+To run the test suite from a source checkout:
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[test]"
+python -m pytest -q
 ```
 
-## Input data
+## Quickstart
 
-The input data should be a finite two-dimensional NumPy array or pandas DataFrame with observations in rows and variables in columns. Missing values should be imputed before constructing a model.
+The examples below use a finite panel-data matrix `X` with shape `(T, N)`, where rows are time observations and columns are variables. NumPy arrays and pandas DataFrames are supported. Handle missing and infinite values before fitting a model.
 
-## Single-break analysis
+### Single-break analysis
 
-This example generates a panel with 300 observations and 100 variables. The factor loadings change after observation 100. Rows represent observations in time order, and columns represent variables.
+The following example generates panel data with a change in factor loadings and performs a single-break LR test.
 
 ```python
 import numpy as np
 from fmbqml import SingleBreakQML
 
-# Generate a panel with one loading break.
+# Generate panel data with a change in factor loadings.
 rng = np.random.default_rng(2024)
-
-T, N, r = 300, 100, 3
-true_break = 100
+T, N, r = 120, 30, 2
+true_break = 60
 
 factors = rng.normal(size=(T, r))
 loadings_before = rng.normal(size=(N, r))
-loadings_after = loadings_before + rng.normal(size=(N, r))
-errors = rng.normal(scale=np.sqrt(r), size=(T, N))
+loadings_after = loadings_before + 0.5 * rng.normal(size=(N, r))
+errors = rng.normal(scale=0.5, size=(T, N))
 
-panel_data = np.empty((T, N))
-panel_data[:true_break] = (
+X = np.empty((T, N))
+X[:true_break] = (
     factors[:true_break] @ loadings_before.T
     + errors[:true_break]
 )
-panel_data[true_break:] = (
+X[true_break:] = (
     factors[true_break:] @ loadings_after.T
     + errors[true_break:]
 )
 
 # Test the null hypothesis of no structural break.
 model = SingleBreakQML(
-    panel_data,
+    X,
     trim_ratio=0.15,
-    max_factors=10,
-    factor_criterion="IC2",
+    max_factors=5,
 )
 
-model.lr_test(
+result = model.lr_test(
     alpha=0.05,
     classify=True,
-    verbose=False,
     n_sim=1000,
     random_state=12345,
 )
 
-# Display the summary and retrieve individual results.
-print(model.summary())
-print("Reject the no-break null:", model.is_rejected())
-print("Estimated breakpoint:", model.get_breakpoint())
-print("Break type:", model.get_break_type())
+print(result)
+print(result.summary())
+
+if result.reject_null:
+    print("Accepted breakpoint:", result.breakpoint)
+    print("Break type:", result.break_type)
+else:
+    print("The no-break null was not rejected.")
+    print("Candidate breakpoint under H1:", result.candidate_breakpoint)
 ```
 
-A breakpoint at `k` separates the first `k` observations from the remaining observations. If the LR test does not reject the no-break null, `get_breakpoint()` returns `None`.
+The LR test evaluates the null hypothesis of no structural break against a single-break alternative. The candidate breakpoint under the alternative is retained in the detailed summary. A breakpoint is reported as accepted only when the null hypothesis is rejected.
 
-Use `estimate_breakpoint()` when one break is assumed to exist and only its location needs to be estimated. This estimation procedure does not perform a significance test.
+If a single break is assumed to exist and only its location is required, use `model.estimate_breakpoint()`. This direct QML estimation procedure does not perform an LR test.
 
-## Multiple-break analysis
+### Multiple-break analysis
 
-This example generates a panel with loading changes after observations 100 and 200. The number and locations of the breaks are estimated from the panel data.
+The following example generates panel data with two changes in factor loadings. It first estimates the number and locations of breaks jointly and then performs a joint sup-LR test against an alternative with two breaks.
 
 ```python
 import numpy as np
 from fmbqml import MultiBreakQML
 
-# Generate a panel with two loading breaks.
-rng = np.random.default_rng(42)
-
-T, N, r = 300, 100, 3
-break_1, break_2 = 100, 200
+# Generate panel data with two changes in factor loadings.
+rng = np.random.default_rng(2025)
+T, N, r = 150, 40, 2
+break_1, break_2 = 50, 100
 
 factors = rng.normal(size=(T, r))
 loadings_1 = rng.normal(size=(N, r))
 loadings_2 = rng.normal(size=(N, r))
 loadings_3 = rng.normal(size=(N, r))
-errors = rng.normal(size=(T, N))
+errors = rng.normal(scale=0.5, size=(T, N))
 
-panel_data = np.empty((T, N))
-panel_data[:break_1] = (
+X = np.empty((T, N))
+X[:break_1] = (
     factors[:break_1] @ loadings_1.T
     + errors[:break_1]
 )
-panel_data[break_1:break_2] = (
+X[break_1:break_2] = (
     factors[break_1:break_2] @ loadings_2.T
     + errors[break_1:break_2]
 )
-panel_data[break_2:] = (
+X[break_2:] = (
     factors[break_2:] @ loadings_3.T
     + errors[break_2:]
 )
 
-# Select the number of breaks and estimate their locations.
 model = MultiBreakQML(
-    panel_data,
+    X,
     max_break=3,
-    max_factors=10,
-    factor_criterion="IC2",
+    max_factors=5,
     trim_ratio=0.10,
 )
 
-model.estimate_breaks_jointly(
+# Joint QML estimation with information-criterion-based break selection.
+estimate = model.estimate_breaks_jointly(
     min_break=0,
     classify=True,
-    verbose=False,
 )
 
-# Display the summary and retrieve individual results.
-print(model.summary())
-print("Selected number of breaks:", model.get_n_breaks())
-print("Estimated breakpoints:", model.get_breakpoints())
-print("Break types:", model.get_break_types())
+print(estimate)
+print(estimate.summary())
+print("Selected number of breaks:", estimate.n_breaks)
+print("Estimated breakpoints:", estimate.breakpoints)
+print("Break types:", estimate.break_types)
 
-# Retrieve and display the information-criterion path.
-ic_path = model.get_ic_path()
-print(ic_path)
-
-# Continue with the model constructed above.
-# Test no break against an alternative with two prespecified breaks.
-model.joint_sup_lr_test(
+# Test no structural break against an alternative with two breaks.
+test = model.joint_sup_lr_test(
     n_breaks=2,
     alpha=0.05,
     n_sim=1000,
-    random_state=123,
+    random_state=12345,
     classify=True,
-    verbose=False,
 )
 
-print(model.summary(mode="joint_lr"))
-print("Reject the no-break null:", model.is_rejected())
-
-if model.is_rejected():
-    print(
-        "Estimated breakpoints:",
-        model.get_breakpoints(mode="joint_lr"),
-    )
-    print(
-        "Break types:",
-        model.get_break_types(mode="joint_lr"),
-    )
+print(test)
+print(test.summary())
+print("Candidate breakpoints under H1:", test.candidate_breakpoints)
+print("Accepted breakpoints:", test.breakpoints)
 ```
 
-`max_break` sets the maximum number of candidate breaks, while `min_break=0` allows selection of a no-break model. The true break locations used to generate the data are not supplied to the estimator.
+In the joint sup-LR test, candidate breakpoints selected under the alternative are distinct from accepted breakpoints. The candidate locations remain available in the result, while accepted breakpoints are reported only when the no-break null hypothesis is rejected.
 
-## Factor-number selection
+## Examples
 
-`factor_criterion` accepts `IC1`, `IC2`, `IC3`, `PC1`, `PC2`, `PC3`, `AIC3`, or `BIC3`. Integer indices `0` through `7` are also accepted in that order.
+Runnable Python scripts and Jupyter notebooks are available in the GitHub [`examples/`](https://github.com/JiangtaoDuan/fmbqml/tree/master/examples) directory. They cover the package's single-break and multiple-break workflows, including the FRED-MD empirical application.
 
-The argument `max_factors` must be a positive integer and specifies the upper bound for factor-number selection. It must not exceed `min(T, N) - 1`.
+The Sphinx documentation source is available in the GitHub [`docs/`](https://github.com/JiangtaoDuan/fmbqml/tree/master/docs) directory. It includes the user guide, API reference, software-design description, and validation information.
 
-## Results and model state
+## References
 
-The package provides dedicated methods for accessing commonly used results without directly inspecting internal result dictionaries.
+The following publications provide background on high-dimensional factor models and structural-break estimation:
 
-For single-break analysis, `is_rejected()` returns the LR test decision, `get_breakpoint()` returns the estimated breakpoint, and `get_break_type()` returns its classification. If the LR test does not reject the no-break null, `get_breakpoint()` returns `None`.
-
-For multiple-break analysis, `get_n_breaks()` returns the number of breaks selected by joint estimation, while `get_breakpoints()` and `get_break_types()` return the estimated break locations and their classifications. The `get_ic_path()` method returns the information-criterion path as a pandas DataFrame. For joint sup-LR testing, `is_rejected()` returns the test decision, and the breakpoint locations and types can be accessed by specifying `mode="joint_lr"`.
-
-The `summary()` method provides a formatted overview of the results. Diagnostic profiles can be accessed through dedicated methods and plotting functions.
-
-For advanced analysis, complete result dictionaries remain available through `get_test_results()`, `get_joint_results()`, and `get_joint_test_results()`. These dictionaries contain additional information, including LR and QML profiles, breakpoint classifications, and information-criterion paths. The result accessors return independent copies of the stored results, preventing modifications to the model's internal state.
-
-Calling `set_data()` or `set_parameters()` validates the new values and clears previously computed results.
-
-## Reproducibility
-
-Monte Carlo procedures used to approximate LR critical values support reproducibility through the `random_state` argument. Users can specify `random_state` when calling `lr_test()`, `joint_sup_lr_test()`, or LR profile plotting methods that perform Monte Carlo simulations.
-
-The examples use fixed random seeds for data generation and critical-value simulation to facilitate reproducibility.
-
-Example scripts demonstrating the main functionality of `fmbqml` are available in the project repository:
-
-- [Examples](https://github.com/JiangtaoDuan/fmbqml/tree/master/examples)
-
-## Dependencies
-
-`fmbqml` depends on NumPy, SciPy, pandas, matplotlib, and joblib. Python 3.8 or newer is required.
+- Duan, J., Bai, J., & Han, X. (2026). Taxonomy and Estimation of Multiple Breakpoints in High-Dimensional Factor Models. *Journal of the American Statistical Association*. https://doi.org/10.1080/01621459.2026.2719782
+- Duan, J., Bai, J., & Han, X. (2023). Quasi-maximum likelihood estimation of break point in high-dimensional factor models. *Journal of Econometrics*, 233(1), 209–236. https://doi.org/10.1016/j.jeconom.2021.12.011
+- Bai, J., Duan, J., & Han, X. (2024). The likelihood ratio test for structural changes in factor models. *Journal of Econometrics*, 238(2), 105631. https://doi.org/10.1016/j.jeconom.2023.105631
+- Bai, J. (2003). Inferential Theory for Factor Models of Large Dimensions. *Econometrica*, 71(1), 135–171. https://doi.org/10.1111/1468-0262.00392
 
 ## License
 
-`fmbqml` is distributed under the GNU General Public License version 3 (GPLv3).
-See [LICENSE.txt](https://github.com/JiangtaoDuan/fmbqml/blob/master/LICENSE.txt).
+`fmbqml` is distributed under the GNU General Public License, version 3 or (at your option) any later version (GPL-3.0-or-later). See [LICENSE.txt](LICENSE.txt) for the full license.

@@ -2,5 +2,12 @@ include README.md
 include LICENSE.txt
 prune tests
 prune examples
-global-exclude __pycache__ *.py[cod]
+prune .idea
+prune .vscode
+prune .pytest_cache
+prune .mypy_cache
+prune .ruff_cache
+global-exclude *.py[cod]
+global-exclude */__pycache__/* */.idea/* */.vscode/*
+global-exclude */.pytest_cache/* */.mypy_cache/* */.ruff_cache/*
 

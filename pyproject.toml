@@ -1,17 +1,17 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=68,<75.4", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "fmbqml"
-version = "0.1.4"
+version = "0.1.5"
 description = "Structural-break detection in high-dimensional factor models using QML methods."
 readme = "README.md"
 requires-python = ">=3.8"
 license = {file = "LICENSE.txt"}
 authors = [
     {name = "Liting Chen"},
-    {name = "Jiangtao Duan", email = "duanjiangtao@xidian.edu.cn"},
+    {name = "Jiangtao Duan"},
     {name = "Xu Han"},
 ]
 keywords = [
@@ -36,6 +36,8 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: OS Independent",
 ]
@@ -49,3 +51,17 @@ Issues = "https://github.com/JiangtaoDuan/fmbqml/issues"
 where = ["."]
 include = ["fmbqml*"]
 exclude = ["fmbqml.tests*", "tests*", "examples*", "replication*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "--strict-markers"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+]
+docs = [
+    "sphinx>=7.2",
+    "furo>=2024.1.29",
+]

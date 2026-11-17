@@ -1,6 +1,7 @@
 """Statistical procedures for classifying factor-model breaks."""
 
 import warnings
+from numbers import Integral
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
@@ -8,6 +9,50 @@ import pandas as pd
 
 import fmbqml.utils as U
 from fmbqml.factor_tools.nb_factors import bai_ng_factor_count
+
+
+def _validate_breakpoint_sequence(breakpoints, T: int) -> List[int]:
+    """Validate breakpoints without silently rounding, sorting, or filtering.
+
+    Breakpoints must be supplied as a one-dimensional iterable of strictly
+    increasing integer locations in the open interval ``(0, T)``.
+    """
+    if breakpoints is None:
+        return []
+
+    if isinstance(breakpoints, (str, bytes)):
+        raise TypeError("breakpoints must be an iterable of integer locations.")
+
+    try:
+        values = list(breakpoints)
+    except TypeError as exc:
+        raise TypeError(
+            "breakpoints must be an iterable of integer locations."
+        ) from exc
+
+    validated = []
+    previous = 0
+    for index, value in enumerate(values):
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, Integral):
+            raise TypeError(
+                f"breakpoints[{index}] must be an integer location; "
+                f"got {value!r}."
+            )
+
+        value = int(value)
+        if not 0 < value < T:
+            raise ValueError(
+                f"breakpoints[{index}]={value} must lie strictly between 0 and T={T}."
+            )
+        if value <= previous:
+            raise ValueError(
+                "breakpoints must be strictly increasing with no duplicates."
+            )
+
+        validated.append(value)
+        previous = value
+
+    return validated
 
 def _zscore_columns(X: np.ndarray) -> np.ndarray:
     """
@@ -209,6 +254,13 @@ def classify_break_types(
     Type 2 (Rotational):
         r_{j,j+1} = min(r_j, r_{j+1})
 
+    Input responsibility
+    --------------------
+    Model objects validate panel data at their public entry points. This
+    lower-level routine assumes direct callers provide finite real-valued
+    panel data; it checks only the array structure and constraints required
+    by the classification algorithm.
+
     Returns
     -------
     dict
@@ -220,16 +272,20 @@ def classify_break_types(
 
     factor_criterion_name = U.CRITERION_NAMES[factor_criterion_index]
 
-    if isinstance(X, pd.DataFrame):
-        X = X.to_numpy(dtype=float)
-    else:
-        X = np.asarray(X, dtype=float)
-
-    T, N = U.validate_input_matrix(X, name="X")
+    # This is an algorithm-level routine. Model objects validate panel data
+    # when it enters the public API; direct callers are responsible for
+    # supplying a finite real-valued panel. Keep only the structural
+    # requirement needed by the calculations below.
+    X = np.asarray(X, dtype=float)
+    if X.ndim != 2:
+        raise ValueError("X must be a two-dimensional panel array.")
+    T, N = X.shape
+    if T < 2 or N < 1:
+        raise ValueError("X must have at least two rows and one column.")
 
     max_factors = U.validate_max_factors(max_factors, T, N)
 
-    breakpoints = sorted(set(int(b) for b in breakpoints if 0 < int(b) < T))
+    breakpoints = _validate_breakpoint_sequence(breakpoints, T)
 
     if min_regime_length is not None:
         min_length = U.validate_positive_integer(

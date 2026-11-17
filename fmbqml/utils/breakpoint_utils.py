@@ -42,7 +42,7 @@ def calculate_break_range(T: int, trim_ratio: float) -> Tuple[int, int]:
     t_min = h
     t_max = T - h
 
-    if t_min >= t_max:
+    if t_min > t_max:
         raise ValueError(
             f"Invalid break search range: ({t_min}, {t_max}). "
             f"Check trim_ratio={trim_ratio} or sample size T={T}."
@@ -66,7 +66,7 @@ def compute_min_segment_length(T: int, trim_ratio: float) -> int:
     Returns
     -------
     int
-        Minimum segment length, computed as ceil(T * trim_ratio).
+        Minimum segment length, computed using ceil(T * trim_ratio).
     """
     if isinstance(T, bool) or not isinstance(T, Integral) or T <= 0:
         raise ValueError(f"T must be a positive integer. Got T={T}.")
@@ -81,7 +81,8 @@ def compute_min_segment_length(T: int, trim_ratio: float) -> int:
             f"Got trim_ratio={trim_ratio}."
         )
 
-    min_segment_length = int(np.ceil(T * trim_ratio - 1e-12))
+    # Every admissible segment must contain at least T * trim_ratio observations.
+    min_segment_length = int(np.ceil(T * trim_ratio))
 
     if min_segment_length < 1:
         raise ValueError(

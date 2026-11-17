@@ -160,3 +160,7 @@ anaconda_projects/
 
 # Local temporary output
 *.tmp
+
+# Additional tooling and editor state
+.ruff_cache/
+.vscode/

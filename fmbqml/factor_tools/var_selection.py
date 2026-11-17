@@ -1,7 +1,10 @@
+
 """Variance-based utilities for factor and rank selection."""
 
-import numpy as np
 from typing import Union
+
+import numpy as np
+
 
 def rth(array: Union[list, np.ndarray], r: int) -> np.ndarray:
     """
@@ -29,14 +32,22 @@ def rth(array: Union[list, np.ndarray], r: int) -> np.ndarray:
     values = np.full(r, m, dtype=float)
 
     working = arr.copy()
+
     for a in range(r):
         for b in range(k):
             if values[a] < working[b]:
                 values[a] = working[b]
                 indices[a] = b
+
         working[indices[a]] = m - 2.0
 
     return np.column_stack([indices, values])
+
+
+def _logdet_cholesky(matrix: np.ndarray) -> float:
+    """Compute the log-determinant using Cholesky factorization."""
+    factor = np.linalg.cholesky(matrix)
+    return float(2.0 * np.sum(np.log(np.diag(factor))))
 
 
 def fit_var(data: np.ndarray, p_min: int, p_max: int, cons: int):
@@ -76,62 +87,89 @@ def fit_var(data: np.ndarray, p_min: int, p_max: int, cons: int):
     Phi = [None] * (p_max + 1)
     BIC = np.zeros(p_max + 1)
 
-    for p in range(p_min, p_max + 1):
+    # Zero-lag model
+    if p_min == 0:
+        if cons == 0:
+            Phizero = np.zeros((k, k))
+            ehatzero = data.copy()
+            num_para = 0
+
+        elif cons == 1:
+            mean_vec = np.mean(data, axis=0)
+            Phizero = np.column_stack([
+                mean_vec,
+                np.zeros((k, k))
+            ])
+            ehatzero = data - mean_vec
+            num_para = k
+
+        else:
+            raise ValueError("cons must be 0 or 1")
+
+        Vzero = ehatzero.T @ ehatzero / (T - num_para)
+        BICzero = (
+            _logdet_cholesky(Vzero)
+            + num_para * np.log(T) / T
+        )
+
+    # Handle the zero-lag-only case
+    if p_max == 0:
+        return Phizero, ehatzero
+
+    # Positive lag orders
+    for p in range(max(p_min, 1), p_max + 1):
         Y = data[p:, :]
         X = np.ones((T - p, 1))
 
-        if p == 0:
-            if cons == 0:
-                Phizero = np.zeros((k, k))
-                ehatzero = data.copy()
-                num_para = 0
-            elif cons == 1:
-                mean_vec = np.mean(data, axis=0)
-                Phizero = np.column_stack([mean_vec, np.zeros((k, k))])
-                ehatzero = data - mean_vec
-                num_para = k
-            else:
-                raise ValueError("cons must be 0 or 1")
+        for lag in range(1, p + 1):
+            X = np.column_stack([
+                X,
+                data[p - lag:T - lag, :]
+            ])
 
-            Vzero = ehatzero.T @ ehatzero / (T - num_para)
-            BICzero = np.log(np.linalg.det(Vzero)) + num_para * np.log(T) / T
+        if cons == 0:
+            X = X[:, 1:]
+            num_para = (k ** 2) * p
+
+        elif cons == 1:
+            num_para = (k ** 2) * p + k
 
         else:
-            for r in range(1, p + 1):
-                X = np.column_stack([X, data[p - r:T - r, :]])
+            raise ValueError("cons must be 0 or 1")
 
-            if cons == 0:
-                X = X[:, 1:]
-                num_para = (k ** 2) * p
-            elif cons == 1:
-                num_para = (k ** 2) * p + k
-            else:
-                raise ValueError("cons must be 0 or 1")
+        # Ordinary least squares
+        Phi_p, _, _, _ = np.linalg.lstsq(
+            X, Y, rcond=None
+        )
 
-            XtX = X.T @ X
-            XtY = X.T @ Y
-            Phi_p = np.linalg.solve(XtX, XtY)
-            ehat_p = Y - X @ Phi_p
-            V_p = ehat_p.T @ ehat_p / T
-            BIC_p = np.log(np.linalg.det(V_p)) + num_para * np.log(T) / T
-            Phi[p] = Phi_p
-            ehat[p] = ehat_p
-            V[p] = V_p
-            BIC[p] = BIC_p
+        ehat_p = Y - X @ Phi_p
 
+        # Residual covariance matrix
+        V_p = ehat_p.T @ ehat_p / T
+
+        # BIC
+        BIC_p = (
+            _logdet_cholesky(V_p)
+            + num_para * np.log(T) / T
+        )
+
+        Phi[p] = Phi_p
+        ehat[p] = ehat_p
+        V[p] = V_p
+        BIC[p] = BIC_p
+
+    # Select the optimal positive lag order
     start = max(p_min, 1)
+
     segment = -BIC[start:p_max + 1].reshape(-1, 1)
     selected_idx = rth(segment, 1)
 
     phat = int(selected_idx[0, 0] + start)
 
-    if phat == 0:
-        phi_opt = Phizero
-        e_opt = ehatzero
-    else:
-        phi_opt = Phi[phat].T
-        e_opt = ehat[phat]
+    phi_opt = Phi[phat].T
+    e_opt = ehat[phat]
 
+    # Compare with the zero-lag model when p_min = 0
     if p_min == 0:
         if BICzero < BIC[phat]:
             phi_opt = Phizero
