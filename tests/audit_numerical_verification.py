@@ -10,7 +10,6 @@ from fmbqml.statistical_tools.hac import hac_newey_west_94
 from fmbqml.statistical_tools.critical_values import (
     simulate_single_sup_lr_critical_values,
 )
-from fmbqml.factor_tools.var_selection import fit_var
 
 
 def independent_hac_reference(x, cons, pw):
@@ -100,7 +99,7 @@ def main():
         ),
         "single_cv": single_cv.tolist(),
         "single_sim_first": float(single_sim[0]),
-        "brownian_scale_normalization_max_diff": normalization_diff,
+        "factor_scale_normalization_max_diff": normalization_diff,
     }
     print(json.dumps(output, indent=2, sort_keys=True))
 

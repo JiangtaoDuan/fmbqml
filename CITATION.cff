@@ -1,0 +1,48 @@
+cff-version: 1.2.0
+message: "If you use fmbqml, please cite this software and the relevant methodology papers."
+type: software
+title: "fmbqml: Structural-break detection in high-dimensional factor models"
+version: 0.1.6
+authors:
+  - family-names: Chen
+    given-names: Liting
+  - family-names: Duan
+    given-names: Jiangtao
+  - family-names: Han
+    given-names: Xu
+repository-code: https://github.com/JiangtaoDuan/fmbqml
+license: GPL-3.0-or-later
+references:
+  - type: article
+    title: Taxonomy and Estimation of Multiple Breakpoints in High-Dimensional Factor Models
+    authors:
+      - family-names: Duan
+        given-names: Jiangtao
+      - family-names: Bai
+        given-names: Jushan
+      - family-names: Han
+        given-names: Xu
+    year: 2026
+    doi: 10.1080/01621459.2026.2719782
+  - type: article
+    title: Quasi-maximum likelihood estimation of break point in high-dimensional factor models
+    authors:
+      - family-names: Duan
+        given-names: Jiangtao
+      - family-names: Bai
+        given-names: Jushan
+      - family-names: Han
+        given-names: Xu
+    year: 2023
+    doi: 10.1016/j.jeconom.2021.12.011
+  - type: article
+    title: The likelihood ratio test for structural changes in factor models
+    authors:
+      - family-names: Bai
+        given-names: Jushan
+      - family-names: Duan
+        given-names: Jiangtao
+      - family-names: Han
+        given-names: Xu
+    year: 2024
+    doi: 10.1016/j.jeconom.2023.105631

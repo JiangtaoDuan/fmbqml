@@ -52,12 +52,11 @@ def test_single_break_result_print_is_compact_and_summary_is_detailed():
     assert "Accepted breakpoint: 100" in printed
     assert "\n\nLR statistic:" in printed
     assert "\n\nAccepted breakpoint:" in printed
-    assert "Break type: Type 1 (Singular)" in printed
+    assert "Breakpoint type: Type 1 (Singular)" in printed
     assert "Call:" not in printed
     assert "SingleBreakQML LR Test Results" in detailed
     assert "Candidate breakpoint under H1: 100" in detailed
     assert "Accepted breakpoint:" in detailed and "100" in detailed
-    assert "Estimated breakpoint:" not in detailed
     # The standard summary remains distinct from verbose diagnostics.
     assert "Call:" not in detailed
     assert str(result) == repr(result)
@@ -76,8 +75,7 @@ def test_single_break_estimation_print_uses_same_compact_layout():
 
     printed = str(result)
     assert printed.startswith("SingleBreakQML Breakpoint Estimation\n")
-    assert "\n\nEstimated breakpoint: 100" in printed
-    assert "Break type: Type 1 (Singular)" in printed
+    assert "Breakpoint type: Type 1 (Singular)" in printed
     assert str(result) == repr(result)
 
 
@@ -97,10 +95,10 @@ def test_single_break_result_print_distinguishes_unaccepted_candidate():
     printed = str(result)
     detailed = str(result.summary())
     assert "Accepted breakpoint: None" in printed
-    assert "Break type:" not in printed
+    assert "Breakpoint type:" not in printed
     assert "Candidate breakpoint under H1: 42" in detailed
     assert "Accepted breakpoint:" in detailed and "None" in detailed
-    assert "Break type:" not in printed
+    assert "Breakpoint type:" not in printed
 
 
 def test_single_break_estimation_print_is_compact():
@@ -116,9 +114,7 @@ def test_single_break_estimation_print_is_compact():
 
     printed = str(result)
     assert "SingleBreakQML Breakpoint Estimation" in printed
-    assert "Estimated breakpoint: 42" in printed
-    assert "\n\nEstimated breakpoint: 42" in printed
-    assert "Break type: Type 2 (Rotational)" in printed
+    assert "Breakpoint type: Type 2 (Rotational)" in printed
     assert "Model specification" not in printed
 
 

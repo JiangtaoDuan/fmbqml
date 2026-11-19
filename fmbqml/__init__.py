@@ -1,6 +1,8 @@
 
 """Public interface for structural-break analysis in factor models."""
 
+__version__ = "0.1.6"
+
 from .single_break.model import (
     SingleBreakQML,
     SingleBreakResults,

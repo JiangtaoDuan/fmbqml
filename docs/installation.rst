@@ -13,7 +13,7 @@ Install from PyPI
 
 .. code-block:: console
 
-   python -m pip install fmbqml==0.1.5
+   python -m pip install fmbqml==0.1.6
 
 To install the latest published release instead, omit the version pin:
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fmbqml"
-version = "0.1.5"
+version = "0.1.6"
 description = "Structural-break detection in high-dimensional factor models using QML methods."
 readme = "README.md"
 requires-python = ">=3.8"

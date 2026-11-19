@@ -9,6 +9,15 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
+def _break_label(result):
+    """Describe a plotted breakpoint according to the analysis decision."""
+    if result.get("test_type") == "lr_test":
+        if result.get("reject_null") is not None and bool(result["reject_null"]):
+            return "Accepted break"
+        return "Candidate break (under H1)"
+    return "Estimated break"
+
+
 def plot_lr_profile(
         result: Dict[str, Any],
         true_break: Optional[int] = None,
@@ -44,12 +53,11 @@ def plot_lr_profile(
         estimated_break = result.get("breakpoint")
 
     if estimated_break is not None:
-        not_rejected = result.get("test_type") == "lr_test" and result.get("reject_null") is False
         ax.axvline(
             estimated_break,
             color="red",
             linestyle="--",
-            label="Candidate break (under H1)" if not_rejected else "Estimated break"
+            label=_break_label(result)
         )
 
     if true_break is not None:
@@ -120,13 +128,12 @@ def plot_qml_profile(
         estimated_break = result.get("breakpoint")
 
     if estimated_break is not None:
-        not_rejected = result.get("test_type") == "lr_test" and result.get("reject_null") is False
         ax.axvline(
             estimated_break,
             color="red",
             linestyle="--",
             linewidth=1.8,
-            label="Candidate break (under H1)" if not_rejected else "Estimated break"
+            label=_break_label(result)
         )
 
     if true_break is not None:

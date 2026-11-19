@@ -5,7 +5,7 @@ from time import perf_counter
 import logging
 
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -124,7 +124,7 @@ class MultiBreakQML:
             f"max_break={self.max_break}, "
             f"max_factors={self.max_factors}, "
             f"factor_criterion={criterion!r}, "
-            f"trim_ratio={self.trim_ratio:.2f})"
+            f"trim_ratio={self.trim_ratio:.4f})"
         )
 
     __str__ = __repr__

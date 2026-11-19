@@ -360,6 +360,47 @@ def test_joint_estimation_builds_qml_cost_matrix_once(monkeypatch):
     assert calls[0][0][0] == X.shape[0]
 
 
+def test_ic_losses_match_joint_lr_objectives(monkeypatch):
+    import fmbqml.multiple_break.joint_estimation as joint_module
+    import fmbqml.multiple_break.joint_testing as testing_module
+    from fmbqml.utils.safe_logdet import safe_logdet
+
+    rng = np.random.default_rng(987)
+    factors = rng.normal(size=(60, 2))
+    factors[30:] *= 2
+    factors = testing_module._normalize_factors(factors)
+    # Force estimation and testing to use the same normalized factors.
+    monkeypatch.setattr(joint_module, "_select_factor_number", lambda *a, **k: 2)
+    monkeypatch.setattr(joint_module, "eig_sort", lambda *a: (factors / np.sqrt(60), np.diag([2., 1.])))
+    monkeypatch.setattr(joint_module, "_estimate_factor_var_spectral_radius", lambda f: 0.)
+    monkeypatch.setattr(testing_module, "factor_long_run_covariance", lambda f: np.eye(3))
+    monkeypatch.setattr(testing_module, "joint_sup_lr_cv", lambda *a: (np.array([1., 2., 3.]), np.zeros(2)))
+
+    _, _, path = joint_module.joint_estimation(
+        rng.normal(size=(60, 4)), 12, 2, 2, 0, 0
+    )
+    assert path[0]["loss"] == pytest.approx(60 * safe_logdet(factors.T @ factors / 60), abs=1e-12)
+    for m in (1, 2):
+        test = testing_module._run_joint_sup_lr(factors, m, trim_ratio=0.2, n_sim=2, grid_size=30)
+        assert path[m]["loss"] == pytest.approx(test["alternative_objective"], abs=1e-10)
+        assert path[m]["loss"] == path[m]["raw_find_min_qml_value"]
+        assert test["test_statistic"] == pytest.approx(max(0., path[0]["loss"] - path[m]["loss"]), abs=1e-10)
+        assert path[m]["IC"] == pytest.approx(path[m]["loss"] + m * path[m]["penalty_per_break"])
+
+
+def test_zero_break_loss_is_full_sample_objective(monkeypatch):
+    import fmbqml.multiple_break.joint_estimation as joint_module
+    from fmbqml.utils.safe_logdet import safe_logdet
+
+    factors = np.random.default_rng(3).normal(size=(30, 2)) * 3
+    monkeypatch.setattr(joint_module, "_select_factor_number", lambda *a, **k: 2)
+    monkeypatch.setattr(joint_module, "eig_sort", lambda *a: (factors / np.sqrt(30), np.diag([2., 1.])))
+    monkeypatch.setattr(joint_module, "_estimate_factor_var_spectral_radius", lambda f: 0.)
+    _, _, path = joint_module.joint_estimation(np.ones((30, 4)), 5, 2, 0, 0, 0)
+    assert path[0]["loss"] == pytest.approx(30 * safe_logdet(factors.T @ factors / 30))
+    assert path[0]["raw_find_min_qml_value"] is None
+
+
 def test_classify_joint_breaks_rejects_empty_estimated_breakpoint_set():
     model = MultiBreakQML(
         np.arange(80, dtype=float).reshape(20, 4),

@@ -34,63 +34,6 @@ def _select_factor_number(X, max_factors, factor_criterion):
     return int(result["khat"][criterion_index])
 
 
-def _compute_logdet(matrix):
-    """Use the ordinary log-determinant, with safe_logdet as a fallback."""
-    try:
-        with np.errstate(over="ignore", under="ignore", invalid="ignore"):
-            determinant = np.linalg.det(matrix)
-
-        if np.isfinite(determinant) and determinant > 0:
-            return float(np.log(determinant))
-
-    except np.linalg.LinAlgError:
-        pass
-
-    return safe_logdet(matrix)
-
-
-def _compute_segment_qml_loss(
-        F_hat,
-        breakpoints,
-        T,
-        r_full,
-        ridge=1e-8,
-):
-    """
-    Compute the final QML loss over all regimes.
-
-    A fixed diagonal ridge is added to each segment second-moment
-    matrix, following the MATLAB implementation.
-    """
-    if breakpoints is None or len(breakpoints) == 0:
-        bk = []
-    else:
-        bk = list(breakpoints)
-
-    edges = [0] + bk + [T]
-    loss_value = 0.0
-
-    for j in range(len(edges) - 1):
-        a = int(edges[j])
-        b = int(edges[j + 1])
-        length = b - a
-
-        if length <= 0:
-            continue
-
-        Fseg = F_hat[a:b, :]
-
-        Sigma = (Fseg.T @ Fseg) / length
-        Sigma = 0.5 * (Sigma + Sigma.T)
-
-        # Apply the same fixed ridge as the MATLAB implementation.
-        Sigma = Sigma + ridge * np.eye(r_full)
-
-        loss_value += length * _compute_logdet(Sigma)
-
-    return float(loss_value)
-
-
 def _estimate_factor_var_spectral_radius(F_hat):
     """Estimate the spectral radius of a no-intercept VAR(1) fitted to factors."""
     Y = F_hat[1:, :]
@@ -110,7 +53,6 @@ def joint_estimation(
         factor_criterion,
         *,
         standardize=False,
-        ridge=1e-8,
 ):
     """
     Jointly estimate multiple structural breakpoints using the QML criterion.
@@ -119,8 +61,7 @@ def joint_estimation(
     principal-component estimation. For each candidate number of breaks,
     dynamic programming minimizes the original segment-wise QML objective.
 
-    After breakpoint locations have been obtained, the final segment losses
-    are recomputed using a fixed diagonal ridge.
+    The IC uses the same segment-wise objective as the joint sup-LR test.
 
     The number of breaks is selected by
 
@@ -144,10 +85,6 @@ def joint_estimation(
         Bai--Ng factor-number selection criterion.
     standardize : bool, default=False
         Whether to standardize the input data before estimation.
-    ridge : float, default=1e-8
-        Diagonal ridge added to segment second-moment matrices
-        when computing the final QML information criterion.
-
     Returns
     -------
     breakpoints_qml : list or str
@@ -209,6 +146,7 @@ def joint_estimation(
         if m == 0:
             breakpoints = []
             raw_min_value = np.nan
+            loss_m = T * safe_logdet(F_hat.T @ F_hat / T)
 
         else:
             raw_min_value, raw_breakpoints = find_min_qml(
@@ -219,19 +157,10 @@ def joint_estimation(
                 cost_matrix=qml_cost_matrix,
             )
             breakpoints = raw_breakpoints.tolist()
+            loss_m = raw_min_value
 
         breakpoint_store[int(m)] = breakpoints
         raw_loss_store[int(m)] = raw_min_value
-
-        # Recompute the final loss using the same ridge for every
-        # candidate number of breaks, including m = 0.
-        loss_m = _compute_segment_qml_loss(
-            F_hat=F_hat,
-            breakpoints=breakpoints,
-            T=T,
-            r_full=r_full,
-            ridge=ridge,
-        )
 
         loss_values[int(m)] = float(loss_m)
         ic_values[int(m)] = float(

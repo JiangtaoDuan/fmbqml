@@ -1,6 +1,6 @@
 """Formatting helpers for user-facing estimation and test summaries."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import numpy as np
 import pandas as pd
@@ -251,7 +251,8 @@ class Summary:
                 str_rows = [[_display(value) for value in r] for r in rows]
                 widths = [max(len(str(h)), *(len(r[i]) for r in str_rows))
                           if str_rows else len(str(h)) for i, h in enumerate(headers)]
-                fmt = lambda r: "  " + "  ".join(str(x).ljust(w) for x, w in zip(r, widths)).rstrip()
+                def fmt(r):
+                    return "  " + "  ".join(str(x).ljust(w) for x, w in zip(r, widths)).rstrip()
                 lines.append(fmt(headers))
                 lines.append("  " + "-" * (sum(widths) + 2 * (len(widths) - 1)))
                 for row in str_rows:
@@ -357,9 +358,12 @@ def _rank_triplets(data, n):
         r0 = pick("r_j", "rj")
         r1 = pick("r_j+1", "r_j1", "r_j_plus_1", "rj1")
         rc = pick("r_j,j+1", "r_j_j+1", "r_jj1", "r_j_j1", "r_joint", "combined_rank")
-        if r0 is None and i < len(reg): r0 = reg[i]
-        if r1 is None and i + 1 < len(reg): r1 = reg[i + 1]
-        if rc is None and i < len(joint): rc = joint[i]
+        if r0 is None and i < len(reg):
+            r0 = reg[i]
+        if r1 is None and i + 1 < len(reg):
+            r1 = reg[i + 1]
+        if rc is None and i < len(joint):
+            rc = joint[i]
         if n == 1:
             r0 = r0 if r0 is not None else data.get("r_j", data.get("rj"))
             r1 = r1 if r1 is not None else data.get("r_j+1", data.get("r_j1"))
@@ -422,7 +426,7 @@ def format_single_break_result_summary(result: Dict[str, Any]) -> Summary:
         (("Sample size", f"T = {result.get('T')}, N = {result.get('N')}"),
          ("Factor criterion", _criterion(result))),
         (("Max factors", result.get("max_factors")),
-         ("Trimming ratio", f"{float(trim):.2f}" if trim is not None else "N/A")),
+         ("Trimming ratio", f"{float(trim):.4f}" if trim is not None else "N/A")),
         (("Search range", result.get("search_range")),
          ("Estimated factors", result.get("estimated_factors"))),
     ])
@@ -469,7 +473,7 @@ def format_single_break_result_summary(result: Dict[str, Any]) -> Summary:
         ])
     else:
         breakpoint_fields = [
-            ("Estimated breakpoints", result.get("breakpoint")),
+            ("Estimated breakpoint", result.get("breakpoint")),
         ]
         breakpoint_label = _format_observation_label(result.get("break_label"))
         if breakpoint_label is not None:
@@ -504,7 +508,7 @@ def format_multi_break_result_summary(result: Dict[str, Any]) -> Summary:
          ("Factor criterion", _criterion(result))),
         (("Max factors", result.get("max_factors")),
          ("Maximum breaks", result.get("max_break"))),
-        (("Trimming ratio", f"{float(trim):.2f}" if trim is not None else "N/A"),
+        (("Trimming ratio", f"{float(trim):.4f}" if trim is not None else "N/A"),
          ("Estimated factors", result.get("estimated_factors"))),
     ])
 

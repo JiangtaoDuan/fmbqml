@@ -120,7 +120,7 @@ class SingleBreakQML:
             f"SingleBreakQML(T={self.T}, N={self.N}, "
             f"max_factors={self.max_factors}, "
             f"factor_criterion={criterion!r}, "
-            f"trim_ratio={self.trim_ratio:.2f})"
+            f"trim_ratio={self.trim_ratio:.4f})"
         )
 
     __str__ = __repr__

@@ -2,10 +2,27 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from ._helpers import generate_panel_data, make_fake_factor_estimator
 from fmbqml import SingleBreakQML, SingleBreakResults
 import fmbqml.single_break.model as qml_module
+from fmbqml.utils.safe_logdet import safe_logdet
+
+
+def test_estimation_and_lr_share_qml_profile_and_breakpoint(monkeypatch):
+    model = SingleBreakQML(generate_panel_data(T=80, N=12), trim_ratio=0.15, max_factors=3)
+    monkeypatch.setattr(model, "_calculate_factors", make_fake_factor_estimator(model, r=2))
+    monkeypatch.setattr(qml_module, "critical_value_lr_hac_m", lambda *a, **k: np.array([1., 2., 3.]))
+
+    estimate = model.estimate_breakpoint(classify=False)
+    test = model.lr_test(alpha=0.05, classify=False, n_sim=5, random_state=7)
+    np.testing.assert_allclose(estimate.qml_values, test.qml_values)
+    assert estimate.breakpoint == test.candidate_breakpoint
+    factors = model._F_hat
+    null_objective = model.T * safe_logdet(factors.T @ factors / model.T)
+    np.testing.assert_allclose(test.lr_values, null_objective - estimate.qml_values)
+    assert test.test_statistic == pytest.approx(null_objective - np.min(estimate.qml_values))
 
 
 def test_lr_test_runs_and_returns_result(monkeypatch):

@@ -282,7 +282,7 @@ class SingleBreakResults:
                 if isinstance(break_types, (list, tuple, np.ndarray)) and len(break_types):
                     break_type = break_types[0]
             if break_type:
-                lines.append(f"Break type: {break_type}")
+                lines.append(f"Breakpoint type: {break_type}")
 
         return "\n".join(lines)
 

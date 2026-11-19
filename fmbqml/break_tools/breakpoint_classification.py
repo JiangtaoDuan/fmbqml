@@ -206,7 +206,7 @@ def classify_breakpoint_result(
     if verbose:
         summary = updated_result["break_type_summary"]
         print(
-            "Break type summary: "
+            "Breakpoint type summary: "
             f"Type 1 = {summary['type1_count']}, "
             f"Type 2 = {summary['type2_count']}, "
             f"Other = {summary['other_count']}"

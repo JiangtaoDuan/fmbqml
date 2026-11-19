@@ -12,9 +12,6 @@ from fmbqml import SingleBreakQML
 
 from fmbqml.utils.breakpoint_utils import map_breakpoint_to_label
 
-from ._helpers import generate_panel_data
-
-
 def test_single_model_init_with_valid_numpy_array():
     X = generate_panel_data()
     model = SingleBreakQML(

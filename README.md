@@ -88,7 +88,7 @@ print(result.summary())
 
 if result.reject_null:
     print("Accepted breakpoint:", result.breakpoint)
-    print("Break type:", result.break_type)
+    print("Breakpoint type:", result.break_type)
 else:
     print("The no-break null was not rejected.")
     print("Candidate breakpoint under H1:", result.candidate_breakpoint)
@@ -148,7 +148,7 @@ print(estimate)
 print(estimate.summary())
 print("Selected number of breaks:", estimate.n_breaks)
 print("Estimated breakpoints:", estimate.breakpoints)
-print("Break types:", estimate.break_types)
+print("Breakpoint types:", estimate.break_types)
 
 # Test no structural break against an alternative with two breaks.
 test = model.joint_sup_lr_test(
@@ -174,6 +174,9 @@ Runnable Python scripts and Jupyter notebooks are available in the GitHub [`exam
 The Sphinx documentation source is available in the GitHub [`docs/`](https://github.com/JiangtaoDuan/fmbqml/tree/master/docs) directory. It includes the user guide, API reference, software-design description, and validation information.
 
 ## References
+
+To cite the software, see [CITATION.cff](CITATION.cff). Please also cite
+the methodology papers relevant to your analysis.
 
 The following publications provide background on high-dimensional factor models and structural-break estimation:
 

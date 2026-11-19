@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT))
 project = "fmbqml"
 author = "Liting Chen, Jiangtao Duan, and Xu Han"
 copyright = "2026, Liting Chen, Jiangtao Duan, and Xu Han"
-release = "0.1.5"
+release = "0.1.6"
 version = release
 
 extensions = [
@@ -42,6 +42,6 @@ intersphinx_mapping = {
 }
 
 html_theme = "furo"
-html_title = "fmbqml 0.1.5 documentation"
+html_title = f"{project} {release} documentation"
 html_static_path = []
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
