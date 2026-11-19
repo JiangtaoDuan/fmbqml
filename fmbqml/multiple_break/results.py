@@ -160,12 +160,16 @@ class MultiBreakResults:
         if table is None or table.empty:
             return "No information-criterion path available."
 
+        def format_value(value):
+            return f"{0.0 if abs(value) < 0.00005 else value:.4f}"
+
         formatters = {
-            key: (lambda value: f"{value:.4f}")
+            key: format_value
             for key in ("IC", "loss")
             if key in table.columns
         }
-        return table.to_string(index=False, formatters=formatters)
+        display_table = table.rename(columns={"estimated_breakpoints": "Estimated breakpoints"})
+        return display_table.to_string(index=False, formatters=formatters)
 
     @property
     def break_labels(self) -> Any:

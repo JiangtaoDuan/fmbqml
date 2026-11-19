@@ -73,7 +73,7 @@ def run_multiple_break_example(n_sim=1000):
     figure_path = output_dir / "multiple_break_mqml_profile.png"
     fig, _ = joint_results.plot_mqml_profile(save_path=figure_path, show=False)
     plt.close(fig)
-    print(f"MQML profile saved to: {figure_path}")
+    print(f"MQML profile saved to:\n{figure_path}")
 
     print("\nJoint sup-LR test")
     joint_lr_result = model.joint_sup_lr_test(

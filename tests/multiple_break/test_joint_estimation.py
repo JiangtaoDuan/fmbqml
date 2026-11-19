@@ -174,7 +174,7 @@ def test_get_joint_results_and_ic_path_after_joint_estimation(monkeypatch):
     assert result["breakpoints"] == [20, 50]
     assert "IC" in ic_table
     assert "10.0000" in ic_table
-    assert "estimated_breakpoints" in ic_table
+    assert "Estimated breakpoints" in ic_table
     assert "U_NT" not in ic_table
 
 
@@ -294,7 +294,7 @@ def test_summary_after_joint_estimation(monkeypatch):
     assert "Factor criterion:" in text
     assert "Break Classification" in text
     ic_table = MultiBreakResults(model._joint_results).format_ic_path_table()
-    assert "estimated_breakpoints" in ic_table
+    assert "Estimated breakpoints" in ic_table
 
 
 def test_joint_estimation_failure_preserves_previous_results(monkeypatch):

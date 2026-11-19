@@ -253,10 +253,12 @@ class Summary:
                           if str_rows else len(str(h)) for i, h in enumerate(headers)]
                 def fmt(r):
                     return "  " + "  ".join(str(x).ljust(w) for x, w in zip(r, widths)).rstrip()
-                lines.append(fmt(headers))
-                lines.append("  " + "-" * (sum(widths) + 2 * (len(widths) - 1)))
-                for row in str_rows:
-                    lines.append(fmt(row))
+                header_text = fmt(headers)
+                row_texts = [fmt(row) for row in str_rows]
+                line_width = max(len(line) for line in [header_text, *row_texts])
+                lines.append(header_text)
+                lines.append("  " + "-" * (line_width - 2))
+                lines.extend(row_texts)
             else:
                 lines.extend("  " + note for note in content)
         return "\n".join(lines)
@@ -407,7 +409,7 @@ def _class_table(summary, data, locations, multiple=False):
     ranks = _rank_triplets(data, len(locations))
     if not any(t is not None for t in types):
         return
-    headers = (["Break"] if multiple else []) + ["Location", "Type", "r_j", "r_j+1", "r_j,j+1"]
+    headers = (["Break"] if multiple else []) + ["Location", "Type", "r_j", "r_{j+1}", "r_{j,j+1}"]
     rows = []
     for i, loc in enumerate(locations):
         rank = ["N/A" if x is None else x for x in ranks[i]]

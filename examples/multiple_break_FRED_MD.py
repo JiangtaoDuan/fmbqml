@@ -74,11 +74,13 @@ clean_data, outlier_counts = remove_outliers(transformed_data)
 # PART 3: EM IMPUTATION
 # ========================================================================
 
+# Suppress iteration-by-iteration EM diagnostics; set verbose=True to display them.
 residuals, em_factors, loadings, eigenvalues, filled_data = factors_em(
     clean_data,
     max_factors,
     factor_ic_method,
-    demean_method
+    demean_method,
+    verbose=False,
 )
 
 
@@ -197,7 +199,7 @@ for candidate_max_break in max_break_grid:
     })
 
 max_break_sensitivity_table = pd.DataFrame(max_break_sensitivity_rows)
-print("\\nSensitivity analysis (main-text Table 10):")
+print("\nSensitivity analysis (main-text Table 10):")
 print(max_break_sensitivity_table.to_string(index=False))
 
 table_output_dir = EXAMPLES_DIR / "output" / "tables"
@@ -240,22 +242,22 @@ appendix_result = appendix_model.estimate_breaks_jointly(
     classify=True,
 )
 
-print("\\nAppendix C - joint-estimation summary:")
+print("\nAppendix C - joint-estimation summary:")
 print(appendix_result.summary())
 
-print("\\nAppendix C - complete information-criterion path (m = 0,...,7):")
+print("\nAppendix C - complete information-criterion path (m = 0,...,7):")
 print(appendix_result.format_ic_path_table())
 
 appendix_breakpoints = appendix_result.breakpoints
 appendix_break_dates = [qml_panel.index[k - 1] for k in appendix_breakpoints]
 
-print("\\nAppendix C - selected breakpoints and dates:")
+print("\nAppendix C - selected breakpoints and dates:")
 for break_number, (location, date_label) in enumerate(
     zip(appendix_breakpoints, appendix_break_dates), start=1
 ):
     print(f"Breakpoint {break_number}: location={location}, date={date_label}")
 
-print("\\nAppendix C - break types:")
+print("\nAppendix C - break types:")
 print(appendix_result.break_types)
 
 # Save the Appendix C IC path for direct use in the paper's supplementary tables.

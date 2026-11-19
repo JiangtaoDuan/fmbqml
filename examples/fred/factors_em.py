@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def factors_em(x, kmax, jj, DEMEAN):
+def factors_em(x, kmax, jj, DEMEAN, verbose=False):
     """
     Expectation-maximization algorithm for factor models.
 
@@ -26,6 +26,10 @@ def factors_em(x, kmax, jj, DEMEAN):
             1 -> demean only
             2 -> demean and standardize
             3 -> recursively demean and then standardize
+
+    verbose : bool, default=False
+        Print the objective and selected factor count at each EM iteration.
+        A warning is still printed if the iteration limit is reached.
 
     Returns
     -------
@@ -108,7 +112,8 @@ def factors_em(x, kmax, jj, DEMEAN):
 
         it += 1
 
-        print(f"Iteration {it}: obj {err:10f} IC {icstar}")
+        if verbose:
+            print(f"Iteration {it}: obj {err:10f} IC {icstar}")
 
         # ---------------------------------------------------------------------
         # UPDATE MISSING VALUES
