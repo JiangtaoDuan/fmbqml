@@ -2,11 +2,11 @@
 
 """Plotting helpers for LR and QML result profiles."""
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 
 def _break_label(result):
@@ -19,10 +19,10 @@ def _break_label(result):
 
 
 def plot_lr_profile(
-        result: Dict[str, Any],
-        true_break: Optional[int] = None,
-        figsize: Tuple[int, int] = (8, 4),
-        save_path: Optional[str] = None,
+        result: dict[str, Any],
+        true_break: int | None = None,
+        figsize: tuple[int, int] = (8, 4),
+        save_path: str | None = None,
         show: bool = True
 ):
     """
@@ -95,10 +95,10 @@ def plot_lr_profile(
 
 
 def plot_qml_profile(
-        result: Dict[str, Any],
-        true_break: Optional[int] = None,
-        figsize: Tuple[int, int] = (8, 4),
-        save_path: Optional[str] = None,
+        result: dict[str, Any],
+        true_break: int | None = None,
+        figsize: tuple[int, int] = (8, 4),
+        save_path: str | None = None,
         show: bool = True
 ):
     """
@@ -160,7 +160,7 @@ def plot_qml_profile(
     return fig, ax
 
 
-def _find_column(df: pd.DataFrame, candidates: List[str]):
+def _find_column(df: pd.DataFrame, candidates: list[str]):
     """
     Find a column using a list of candidate names.
     """
@@ -175,10 +175,10 @@ def _find_column(df: pd.DataFrame, candidates: List[str]):
 
 
 def plot_mqml_profile(
-        result: Dict[str, Any],
-        figsize: Tuple[int, int] = (8, 4),
+        result: dict[str, Any],
+        figsize: tuple[int, int] = (8, 4),
         plot_loss: bool = True,
-        save_path: Optional[str] = None,
+        save_path: str | None = None,
         show: bool = True
 ):
     """

@@ -3,13 +3,14 @@
 Run with ``python -m tests.audit_numerical_verification``.
 """
 import json
+
 import numpy as np
 
-from fmbqml.multiple_break.joint_testing import _run_joint_sup_lr, _normalize_factors
-from fmbqml.statistical_tools.hac import hac_newey_west_94
+from fmbqml.multiple_break.joint_testing import _normalize_factors, _run_joint_sup_lr
 from fmbqml.statistical_tools.critical_values import (
     simulate_single_sup_lr_critical_values,
 )
+from fmbqml.statistical_tools.hac import hac_newey_west_94
 
 
 def independent_hac_reference(x, cons, pw):

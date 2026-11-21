@@ -35,7 +35,11 @@ def _select_factor_number(X, max_factors, factor_criterion):
 
 
 def _estimate_factor_var_spectral_radius(F_hat):
-    """Estimate the spectral radius of a no-intercept VAR(1) fitted to factors."""
+    """Fit a no-intercept factor VAR(1) and return its largest eigenvalue modulus.
+
+    Least squares accommodates singular lagged-factor matrices; the radius
+    enters the information-criterion penalty for selecting break counts.
+    """
     Y = F_hat[1:, :]
     X_lag = F_hat[:-1, :]
     phi = np.linalg.lstsq(X_lag, Y, rcond=None)[0].T

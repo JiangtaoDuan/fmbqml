@@ -1,6 +1,7 @@
 """Check how profile plots describe estimated and accepted breaks."""
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np

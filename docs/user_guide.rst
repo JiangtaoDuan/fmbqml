@@ -145,9 +145,17 @@ Result objects and reproducibility
 
 The model methods return result objects. Use attribute access to retrieve
 statistics and estimated locations, ``summary()`` for a detailed report,
-and ``to_dict()`` when an independent dictionary copy is needed. Result
-objects are snapshots: subsequent model updates do not alter results already
-returned to the caller.
+and ``to_dict()`` when an independent dictionary copy is needed. The
+``to_dict(include_diagnostics=False)`` option omits large diagnostic paths
+and arrays while retaining the main results. The returned dictionary displays
+one top-level field per line when printed::
+
+   print(result.to_dict(include_diagnostics=False))
+
+Result objects are snapshots: subsequent model updates do not alter results
+already returned to the caller. Both model classes also provide ``factors_``
+and ``factor_loadings_`` properties for direct access to copies of the
+estimated factor and loading matrices.
 
 The LR critical values are approximated by Monte Carlo simulation. Set
 ``random_state`` to an integer to make the simulation reproducible. The

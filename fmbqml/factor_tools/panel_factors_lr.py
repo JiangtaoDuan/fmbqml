@@ -54,7 +54,7 @@ def estimate_panel_factors_lr(X, r):
 
     XX = (X @ X.T) / (N * T)
 
-    Fhat0, S, Fhat1 = np.linalg.svd(XX, full_matrices=True)
+    Fhat0, S, _ = np.linalg.svd(XX, full_matrices=True)
 
     factor = Fhat0[:, :r] * np.sqrt(T)
 

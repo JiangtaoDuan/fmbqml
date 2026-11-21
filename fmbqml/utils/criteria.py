@@ -1,8 +1,6 @@
 """Information-criterion names and normalization helpers."""
 
 from numbers import Integral
-from typing import Union
-
 
 CRITERION_NAMES = {
     0: "IC1",
@@ -20,7 +18,7 @@ CRITERION_INDEX = {v: k for k, v in CRITERION_NAMES.items()}
 VALID_CRITERION_NAMES = set(CRITERION_INDEX.keys())
 
 
-def normalize_factor_criterion(criterion: Union[int, str]) -> int:
+def normalize_factor_criterion(criterion: int | str) -> int:
     """
     Convert a factor-selection criterion name or index to an integer index.
 
@@ -41,7 +39,7 @@ def normalize_factor_criterion(criterion: Union[int, str]) -> int:
     ValueError
         If the criterion is invalid.
     """
-    if isinstance(criterion, bool):
+    if type(criterion) is bool:
         raise ValueError(_criterion_error_message(criterion))
 
     if isinstance(criterion, Integral):
@@ -59,7 +57,7 @@ def normalize_factor_criterion(criterion: Union[int, str]) -> int:
     raise ValueError(_criterion_error_message(criterion))
 
 
-def get_criterion_name(criterion: Union[int, str]) -> str:
+def get_criterion_name(criterion: int | str) -> str:
     """
     Return the string name of a factor-selection criterion.
 

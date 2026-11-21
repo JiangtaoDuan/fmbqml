@@ -7,7 +7,11 @@ from fmbqml.utils.safe_logdet import safe_logdet
 
 
 def _segment_logdet(second_moment: np.ndarray) -> float:
-    """Return the log-determinant, or +inf if computation fails."""
+    """Return a segment's log-determinant, or infinity if it is unusable.
+
+    Nonfinite inputs and linear-algebra failures disqualify the candidate;
+    nonsquare matrices indicate a programming error and raise ``ValueError``.
+    """
     matrix = np.asarray(second_moment, dtype=float)
 
     if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
@@ -81,7 +85,7 @@ def compute_single_break_qml_profile(
         or isinstance(t_max, (bool, np.bool_))
         or not isinstance(t_max, (int, np.integer))
     ):
-        raise ValueError("t_min and t_max must be integers.")
+        raise TypeError("t_min and t_max must be integers.")
 
     if t_min < 1 or t_max >= T or t_min > t_max:
         raise ValueError(

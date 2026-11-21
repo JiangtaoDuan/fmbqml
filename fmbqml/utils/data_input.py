@@ -1,6 +1,6 @@
 """Input conversion helpers for panel-data interfaces."""
 
-from typing import Any, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -66,8 +66,8 @@ def _validate_break_panel(X) -> np.ndarray:
     return array
 
 def prepare_input_data(
-        X: Union[np.ndarray, pd.DataFrame]
-) -> Tuple[np.ndarray, Union[np.ndarray, pd.DataFrame], Optional[Any]]:
+        X: np.ndarray | pd.DataFrame
+) -> tuple[np.ndarray, np.ndarray | pd.DataFrame, Any | None]:
     """
     Convert input data to a numerical numpy array and preserve original metadata.
 
@@ -96,12 +96,12 @@ def prepare_input_data(
     return data_array, original_data, row_index
 
 def prepare_multi_input_data(
-        X: Union[np.ndarray, pd.DataFrame]
-) -> Tuple[
+        X: np.ndarray | pd.DataFrame
+) -> tuple[
     np.ndarray,
-    Union[np.ndarray, pd.DataFrame],
-    Optional[Any],
-    Optional[Any],
+    np.ndarray | pd.DataFrame,
+    Any | None,
+    Any | None,
     bool,
 ]:
     """Convert multiple-break input data and preserve tabular metadata.

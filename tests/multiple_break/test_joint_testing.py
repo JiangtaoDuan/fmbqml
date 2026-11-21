@@ -3,10 +3,11 @@
 import numpy as np
 import pytest
 
-from ._helpers import generate_panel_data, make_fake_ic_path, normalized_factors
+import fmbqml.multiple_break.model as mqml_module
 from fmbqml import MultiBreakQML, MultiBreakResults
 from fmbqml.multiple_break.joint_testing import _normalize_factors
-import fmbqml.multiple_break.model as mqml_module
+
+from ._helpers import generate_panel_data, make_fake_ic_path, normalized_factors
 
 
 def test_joint_methods_use_object_trim_ratio_by_default(monkeypatch):

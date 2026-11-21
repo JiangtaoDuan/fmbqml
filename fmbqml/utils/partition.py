@@ -1,7 +1,6 @@
 """Generic dynamic-programming tools for additive partitions."""
 
 from numbers import Integral
-from typing import List, Tuple
 
 import numpy as np
 
@@ -11,8 +10,14 @@ def optimize_additive_partition(
         n_segments: int,
         min_length: int,
         maximize: bool = False,
-) -> Tuple[float, List[int]]:
-    """Optimize an additive criterion over exactly ``n_segments`` segments."""
+) -> tuple[float, list[int]]:
+    """Optimize an additive criterion over exactly ``n_segments`` segments.
+
+    ``values[start, end]`` is the score of the half-open segment [start, end).
+    Dynamic programming enforces ``min_length`` and backtracks the optimal
+    internal endpoints. Infinite scores mark unusable paths; if no finite
+    complete partition exists, a ``RuntimeError`` is raised.
+    """
     values = np.asarray(values, dtype=float)
     if values.ndim != 2 or values.shape[0] != values.shape[1]:
         raise ValueError("values must be a square matrix.")

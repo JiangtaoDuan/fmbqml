@@ -3,11 +3,12 @@
 import numpy as np
 import pandas as pd
 
-from ._helpers import generate_panel_data, make_fake_factor_estimator
-from fmbqml import SingleBreakQML, SingleBreakResults
 import fmbqml.single_break.model as qml_module
+from fmbqml import SingleBreakQML, SingleBreakResults
 from fmbqml.single_break.qml_profile import compute_single_break_qml_profile
 from fmbqml.utils.breakpoint_utils import calculate_break_range
+
+from ._helpers import generate_panel_data, make_fake_factor_estimator
 
 
 def test_calculate_factors_positive_factor_runs(monkeypatch):
@@ -112,7 +113,7 @@ def test_estimate_breakpoint_summary_is_explicit(monkeypatch, capsys):
     assert "SingleBreakQML" in capsys.readouterr().out
 
 
-def test_get_qml_profile_after_estimate_breakpoint(monkeypatch):
+def test_qml_profile_property_after_estimate_breakpoint(monkeypatch):
     X = generate_panel_data(T=200, N=100)
     model = SingleBreakQML(X, trim_ratio=0.1, factor_criterion=1)
 
@@ -161,3 +162,21 @@ def test_factor_estimates_are_reused_across_single_break_workflows(monkeypatch):
 
     model.get_factor_estimates(recalculate=True)
     assert calls == {"count": 2, "estimate": 2}
+
+
+def test_factor_matrix_properties_return_independent_copies():
+    model = SingleBreakQML(generate_panel_data(), max_factors=5)
+    model._nbhat_r = 2
+    model._F_hat = np.arange(model.T * 2, dtype=float).reshape(model.T, 2)
+    model._L_hat = np.arange(model.N * 2, dtype=float).reshape(model.N, 2)
+    model._VNT = np.eye(2)
+
+    factors = model.factors_
+    loadings = model.factor_loadings_
+
+    assert factors.shape == (model.T, 2)
+    assert loadings.shape == (model.N, 2)
+    factors[0, 0] = -999.0
+    loadings[0, 0] = -999.0
+    assert model._F_hat[0, 0] != -999.0
+    assert model._L_hat[0, 0] != -999.0

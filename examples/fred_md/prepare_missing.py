@@ -57,9 +57,7 @@ def transxf(x, tcode):
 
     elif tcode == 4:
         # Natural log: ln(x)
-        if np.all(np.isnan(x)):
-            y[:] = np.nan
-        elif np.nanmin(x) < small:
+        if np.all(np.isnan(x)) or np.nanmin(x) < small:
             y[:] = np.nan
         else:
             y = np.log(x)

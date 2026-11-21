@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use fmbqml, please cite this software and the relevant methodology papers."
 type: software
 title: "fmbqml: Structural-break detection in high-dimensional factor models"
-version: 0.1.6
+version: 0.1.7
 authors:
   - family-names: Chen
     given-names: Liting

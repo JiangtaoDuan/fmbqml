@@ -1,11 +1,88 @@
 """Formatting helpers for user-facing estimation and test summaries."""
 
-from typing import Any, Dict
+from contextlib import suppress
+from reprlib import recursive_repr
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 from fmbqml.utils.criteria import CRITERION_NAMES
+
+
+def _format_nested_value(value: Any, indent: int, prefix_width: int, seen: set[int]) -> str:
+    """Wrap long containers while keeping short values and strings intact."""
+    text = repr(value)
+    if (
+        not isinstance(value, (dict, list, tuple))
+        or not value
+        or ("\n" not in text and indent + prefix_width + len(text) <= 100)
+        or id(value) in seen
+    ):
+        return text
+
+    seen.add(id(value))
+    try:
+        child_indent = indent + 4
+        if isinstance(value, dict):
+            entries = []
+            for key, item in value.items():
+                prefix = f"{key!r}: "
+                entries.append(prefix + _format_nested_value(item, child_indent, len(prefix), seen))
+            opening, closing = "{", "}"
+        else:
+            entries = [_format_nested_value(item, child_indent, 0, seen) for item in value]
+            opening, closing = ("[", "]") if isinstance(value, list) else ("(", ")")
+            if isinstance(value, tuple) and len(value) == 1:
+                entries[0] += ","
+        separator = ",\n" + " " * child_indent
+        return opening + "\n" + " " * child_indent + separator.join(entries) + "\n" + " " * indent + closing
+    finally:
+        seen.remove(id(value))
+
+
+class _DisplayDict(dict):
+    """A dictionary displayed with one top-level entry per line."""
+
+    @recursive_repr(fillvalue="{...}")
+    def __repr__(self) -> str:
+        if not self:
+            return "{}"
+        entries = []
+        for key, value in self.items():
+            prefix = f"{key!r}: "
+            entries.append(prefix + _format_nested_value(value, 4, len(prefix), {id(self)}))
+        return "{\n    " + ",\n    ".join(entries) + "\n}"
+
+    __str__ = __repr__
+
+    def _repr_pretty_(self, printer, cycle):
+        printer.text("{...}" if cycle else repr(self))
+
+
+class _FactorEstimatesDict(_DisplayDict):
+    """Display factor arrays by shape and a short sample of their values."""
+
+    @recursive_repr(fillvalue="{...}")
+    def __repr__(self) -> str:
+        if not self:
+            return "{}"
+        entries = []
+        for key, value in self.items():
+            prefix = f"{key!r}: "
+            if isinstance(value, np.ndarray):
+                sample = np.array2string(
+                    value.flat[:4], precision=4, separator=", ", max_line_width=100
+                )
+                if value.size > 4:
+                    sample = sample[:-1] + ", ...]"
+                text = f"array(shape={value.shape}, sample={sample})"
+            else:
+                text = _format_nested_value(value, 4, len(prefix), {id(self)})
+            entries.append(prefix + text)
+        return "{\n    " + ",\n    ".join(entries) + "\n}"
+
+    __str__ = __repr__
 
 
 def _format_float(value: Any, digits: int = 4) -> str:
@@ -17,7 +94,7 @@ def _format_float(value: Any, digits: int = 4) -> str:
 
     try:
         value = float(value)
-    except Exception:
+    except (TypeError, ValueError, OverflowError):
         return str(value)
 
     if not np.isfinite(value):
@@ -33,12 +110,10 @@ def _get_list_item(values: Any, index: int, default: Any = "") -> Any:
     if values is None:
         return default
 
-    try:
+    with suppress(TypeError, IndexError, KeyError, AttributeError):
         if len(values) > index:
             value = values[index]
             return default if value is None else value
-    except Exception:
-        pass
 
     return default
 
@@ -63,7 +138,7 @@ def _safe_min_text(a: Any, b: Any) -> str:
     """
     try:
         return str(min(int(a), int(b)))
-    except Exception:
+    except (TypeError, ValueError, OverflowError):
         return ""
 
 
@@ -111,7 +186,7 @@ def _format_breakpoints(x: Any) -> str:
 
     try:
         arr = np.asarray(x).reshape(-1)
-    except Exception:
+    except (TypeError, ValueError):
         return str(x)
 
     if arr.size == 0:
@@ -120,11 +195,9 @@ def _format_breakpoints(x: Any) -> str:
     out = []
 
     for v in arr:
-        try:
+        with suppress(TypeError, ValueError, OverflowError):
             if np.isfinite(v):
-                out.append(str(int(round(float(v)))))
-        except Exception:
-            pass
+                out.append(str(round(float(v))))
 
     return "[" + ", ".join(out) + "]" if out else "[]"
 
@@ -251,8 +324,10 @@ class Summary:
                 str_rows = [[_display(value) for value in r] for r in rows]
                 widths = [max(len(str(h)), *(len(r[i]) for r in str_rows))
                           if str_rows else len(str(h)) for i, h in enumerate(headers)]
-                def fmt(r):
-                    return "  " + "  ".join(str(x).ljust(w) for x, w in zip(r, widths)).rstrip()
+                def fmt(r, column_widths=widths):
+                    return "  " + "  ".join(
+                        str(x).ljust(w) for x, w in zip(r, column_widths)
+                    ).rstrip()
                 header_text = fmt(headers)
                 row_texts = [fmt(row) for row in str_rows]
                 line_width = max(len(line) for line in [header_text, *row_texts])
@@ -351,9 +426,9 @@ def _rank_triplets(data, n):
     for i in range(n):
         record = records[i] if i < len(records) and isinstance(records[i], dict) else {}
         norm = {str(k).lower().replace(" ", "").replace("-", "_"): v for k, v in record.items()}
-        def pick(*keys):
+        def pick(*keys, normalized=norm):
             for key in keys:
-                v = norm.get(key)
+                v = normalized.get(key)
                 if v is not None:
                     return v
             return None
@@ -418,7 +493,7 @@ def _class_table(summary, data, locations, multiple=False):
     summary.add_table("Break Classification", headers, rows)
 
 
-def format_single_break_result_summary(result: Dict[str, Any]) -> Summary:
+def format_single_break_result_summary(result: dict[str, Any]) -> Summary:
     """Build a compact, structured single-break report from stored results."""
     test = result.get("test_type") == "lr_test"
     report = Summary("SingleBreakQML LR Test Results" if test
@@ -495,7 +570,7 @@ def format_single_break_result_summary(result: Dict[str, Any]) -> Summary:
     return report
 
 
-def format_multi_break_result_summary(result: Dict[str, Any]) -> Summary:
+def format_multi_break_result_summary(result: dict[str, Any]) -> Summary:
     """Build a compact joint-QML or joint sup-LR report from stored results."""
     test_type = str(result.get("test_type", "")).lower()
     if "joint_sup_lr_profile" in test_type:

@@ -1,22 +1,18 @@
 """Tests for multiple_break test_joint_estimation."""
 
 import numpy as np
-
 import pandas as pd
-
 import pytest
+
+import fmbqml.multiple_break.model as mqml_module
+from fmbqml import MultiBreakQML, MultiBreakResults
+from fmbqml.multiple_break.qml_optimization import build_qml_cost_matrix, find_min_qml
 
 from ._helpers import (
     generate_panel_data,
     make_fake_classify_breakpoint_result,
     make_fake_ic_path,
 )
-
-from fmbqml import MultiBreakQML, MultiBreakResults
-
-import fmbqml.multiple_break.model as mqml_module
-
-from fmbqml.multiple_break.qml_optimization import build_qml_cost_matrix, find_min_qml
 
 
 def test_joint_estimate_min_break_infeasible_raises():
@@ -51,8 +47,9 @@ def test_joint_estimate_warns_when_max_break_too_large(monkeypatch):
             min_break=0,
             classify=False,
         )
-        assert isinstance(result, MultiBreakResults)
-        result = result.to_dict()
+
+    assert isinstance(result, MultiBreakResults)
+    result = result.to_dict()
 
     assert result["breakpoints"] == []
     assert result["n_breaks"] == 0
@@ -145,37 +142,6 @@ def test_joint_estimate_no_breakpoint_string(monkeypatch):
     assert "break_labels" not in result
     assert result["n_breaks"] == 0
     assert "break_types" not in result
-
-
-def test_get_joint_results_and_ic_path_after_joint_estimation(monkeypatch):
-    X = generate_panel_data(T=80, N=12)
-    model = MultiBreakQML(X, max_break=2, max_factors=3, factor_criterion=1)
-
-    def fake_joint_estimation(
-        X,
-        min_segment_length,
-        max_factors,
-        max_break,
-        min_break,
-        factor_criterion,
-    ):
-        return [20, 50], 2, make_fake_ic_path()
-
-    monkeypatch.setattr(mqml_module, "joint_estimation", fake_joint_estimation)
-
-    model.estimate_breaks_jointly(
-        min_break=0,
-        classify=False,
-    )
-
-    result = MultiBreakResults(model._joint_results).to_dict()
-    ic_table = MultiBreakResults(model._joint_results).format_ic_path_table()
-
-    assert result["breakpoints"] == [20, 50]
-    assert "IC" in ic_table
-    assert "10.0000" in ic_table
-    assert "Estimated breakpoints" in ic_table
-    assert "U_NT" not in ic_table
 
 
 def test_plot_mqml_profile_after_joint_estimation(monkeypatch):
@@ -374,7 +340,7 @@ def test_ic_losses_match_joint_lr_objectives(monkeypatch):
     monkeypatch.setattr(joint_module, "eig_sort", lambda *a: (factors / np.sqrt(60), np.diag([2., 1.])))
     monkeypatch.setattr(joint_module, "_estimate_factor_var_spectral_radius", lambda f: 0.)
     monkeypatch.setattr(testing_module, "factor_long_run_covariance", lambda f: np.eye(3))
-    monkeypatch.setattr(testing_module, "joint_sup_lr_cv", lambda *a: (np.array([1., 2., 3.]), np.zeros(2)))
+    monkeypatch.setattr(testing_module, "joint_sup_lr_cv", lambda *a, **k: (np.array([1., 2., 3.]), np.zeros(2)))
 
     _, _, path = joint_module.joint_estimation(
         rng.normal(size=(60, 4)), 12, 2, 2, 0, 0

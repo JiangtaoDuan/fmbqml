@@ -1,28 +1,26 @@
 """Object-oriented interface for multiple-break QML procedures."""
 
+import logging
+import warnings
 from copy import deepcopy
 from time import perf_counter
-import logging
-
-import warnings
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
+import fmbqml.utils as U
 from fmbqml.break_tools import classify_breakpoint_result
 from fmbqml.factor_tools import (
     bai_ng_factor_count,
     estimate_panel_factors,
 )
-
 from fmbqml.multiple_break.joint_estimation import joint_estimation
 from fmbqml.multiple_break.joint_testing import _run_joint_sup_lr
-
-import fmbqml.utils as U
+from fmbqml.statistical_tools.critical_values import _validate_n_jobs
+from fmbqml.utils.formatting import _DisplayDict, _FactorEstimatesDict
 
 from .results import MultiBreakResults
-
 
 _logger = logging.getLogger(__name__)
 
@@ -37,17 +35,42 @@ class MultiBreakQML:
     via global QML optimization and supports breakpoint-type classification
     through ``classify_joint_breaks()``.
     """
-    # Configuration and data are updated only through validated setters.
+    # Data and dimensions are protected; configuration changes use validated setters.
     _PROTECTED_SETTINGS = ('T', 'N', 'max_break', 'max_factors', 'factor_criterion', 'trim_ratio')
+
+    _CONFIG_SETTINGS = ("max_break", "max_factors", "factor_criterion", "trim_ratio")
 
     def __setattr__(self, name: str, value: Any) -> None:
         if name == "_X" and "_X" in self.__dict__:
             raise AttributeError("Internal panel data cannot be replaced directly; use set_data().")
-        if name in self._PROTECTED_SETTINGS and name in self.__dict__:
-            raise AttributeError(
-                f"{name} is read-only; use set_parameters() or set_data() instead."
-            )
+        if name in self._CONFIG_SETTINGS and name in self.__dict__:
+            self.set_parameters(**{name: value})
+            return
+        if name in ("T", "N") and name in self.__dict__:
+            raise AttributeError(f"{name} is read-only; use set_data() instead.")
         super().__setattr__(name, value)
+
+    @property
+    def factors_(self) -> np.ndarray:
+        """Estimated common-factor matrix, computed and cached on first access.
+
+        Returns a copy so callers cannot modify the model's internal cache.
+        The factor estimates are recomputed after a successful configuration
+        update or data replacement.
+        """
+        estimates = self.get_factor_estimates(recalculate=False)
+        return estimates["F_hat"]
+
+    @property
+    def factor_loadings_(self) -> np.ndarray:
+        """Estimated factor-loading matrix, computed and cached on first access.
+
+        Returns a copy so callers cannot modify the model's internal cache.
+        The factor estimates are recomputed after a successful configuration
+        update or data replacement.
+        """
+        estimates = self.get_factor_estimates(recalculate=False)
+        return estimates["L_hat"]
 
     @property
     def X(self) -> np.ndarray:
@@ -67,10 +90,10 @@ class MultiBreakQML:
 
     def __init__(
             self,
-            X: Union[np.ndarray, pd.DataFrame],
+            X: np.ndarray | pd.DataFrame,
             max_break: int = 5,
             max_factors: int = 10,
-            factor_criterion: Union[int, str] = "IC1",
+            factor_criterion: int | str = "IC1",
             trim_ratio: float = 0.1,
     ) -> None:
         """
@@ -133,22 +156,22 @@ class MultiBreakQML:
         self.joint_estimated = False
         self.joint_tested = False
 
-        self._joint_results: Dict[str, Any] = {}
-        self._joint_test_results: Dict[str, Any] = {}
+        self._joint_results: dict[str, Any] = {}
+        self._joint_test_results: dict[str, Any] = {}
 
-        self._r_hat: Optional[int] = None
-        self._F_hat: Optional[np.ndarray] = None
-        self._L_hat: Optional[np.ndarray] = None
-        self._VNT: Optional[np.ndarray] = None
+        self._r_hat: int | None = None
+        self._F_hat: np.ndarray | None = None
+        self._L_hat: np.ndarray | None = None
+        self._VNT: np.ndarray | None = None
 
     def _classify_breakpoints(
             self,
-            breakpoints: List[int],
-            result_dict: Dict[str, Any],
-            trim_ratio: Optional[float] = None,
-            min_regime_length: Optional[int] = None,
+            breakpoints: list[int],
+            result_dict: dict[str, Any],
+            trim_ratio: float | None = None,
+            min_regime_length: int | None = None,
             verbose: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Shared breakpoint classification logic for joint-estimation results.
         """
@@ -217,8 +240,9 @@ class MultiBreakQML:
             n_breaks: int,
             alpha: float = 0.01,
             n_sim: int = 2000,
-            random_state: Optional[int] = None,
-            classify: bool = True
+            random_state: int | None = None,
+            classify: bool = True,
+            n_jobs: int = -1
     ) -> MultiBreakResults:
         """Test no structural change against exactly ``n_breaks`` changes.
 
@@ -239,6 +263,8 @@ class MultiBreakQML:
         classify : bool, default=True
             If True, classify the estimated breakpoints only when the test
             rejects the null hypothesis of no structural break.
+        n_jobs : int, default=-1
+            Number of parallel Monte Carlo workers; -1 uses all CPUs.
 
         Returns
         -------
@@ -271,6 +297,7 @@ class MultiBreakQML:
         classify = U.validate_boolean(classify, "classify")
         n_sim = U.validate_positive_integer(n_sim, "n_sim")
         random_state = U.validate_random_state(random_state)
+        n_jobs = _validate_n_jobs(n_jobs)
         if n_breaks > self.max_break:
             raise ValueError(
                 f"n_breaks must be <= max_break={self.max_break}. "
@@ -286,6 +313,7 @@ class MultiBreakQML:
             alpha=alpha,
             n_sim=n_sim,
             random_state=random_state,
+            n_jobs=n_jobs,
         )
         result.update({
             "estimated_factors": factors["estimated_factors"],
@@ -428,12 +456,10 @@ class MultiBreakQML:
         else:
             flat_breaks = np.asarray(breakpoints).flatten()
 
-            if len(flat_breaks) == 0:
-                breakpoints = []
-            elif len(flat_breaks) == 1 and str(flat_breaks[0]) == "no breakpoint":
+            if len(flat_breaks) == 0 or len(flat_breaks) == 1 and str(flat_breaks[0]) == "no breakpoint":
                 breakpoints = []
             else:
-                breakpoints = sorted(set(int(b) for b in flat_breaks))
+                breakpoints = sorted({int(b) for b in flat_breaks})
 
         break_number = len(breakpoints)
 
@@ -492,7 +518,7 @@ class MultiBreakQML:
 
         return MultiBreakResults(deepcopy(joint_results))
 
-    def get_data(self) -> Union[np.ndarray, pd.DataFrame]:
+    def get_data(self) -> np.ndarray | pd.DataFrame:
         """
         Return the input X in its original format.
 
@@ -503,7 +529,7 @@ class MultiBreakQML:
         """
         return self._original_X.copy()
 
-    def get_factor_estimates(self, recalculate: bool = False) -> Dict[str, Any]:
+    def get_factor_estimates(self, recalculate: bool = False) -> dict[str, Any]:
         """
         Return estimated factors and loadings used in multi-break analysis.
 
@@ -517,10 +543,10 @@ class MultiBreakQML:
         -------
         dict
             Dictionary containing:
-            - estimated_factors : estimated number of factors
             - F_hat : estimated factor matrix
             - L_hat : estimated loading matrix
-            - VNT   : diagonal matrix of leading eigenvalues
+            - VNT : (r, r) diagonal matrix of leading eigenvalues
+            - estimated_factors : estimated number of factors
             - factor_criterion : Bai--Ng criterion used
 
         Notes
@@ -528,6 +554,8 @@ class MultiBreakQML:
         The number of factors is selected using the Bai-Ng information
         criterion specified by `self.factor_criterion`. Factor estimation
         is then performed by `estimate_panel_factors()`.
+        Array entries display their shape and a short sample; indexing the
+        returned dictionary gives the complete independent arrays.
         """
         recalculate = U.validate_boolean(recalculate, "recalculate")
         if recalculate or self._F_hat is None or self._L_hat is None or self._VNT is None:
@@ -549,17 +577,17 @@ class MultiBreakQML:
             self._L_hat = L_hat
             self._VNT = VNT
 
-        return {
-            "estimated_factors": self._r_hat,
+        return _FactorEstimatesDict({
             "F_hat": self._F_hat.copy() if self._F_hat is not None else None,
             "L_hat": self._L_hat.copy() if self._L_hat is not None else None,
             "VNT": self._VNT.copy() if self._VNT is not None else None,
+            "estimated_factors": self._r_hat,
             "factor_criterion": self.factor_criterion,
-        }
+        })
 
     def set_data(
             self,
-            new_X: Union[np.ndarray, pd.DataFrame]
+            new_X: np.ndarray | pd.DataFrame
     ) -> "MultiBreakQML":
         """Replace the panel data and clear all cached results.
 
@@ -601,32 +629,44 @@ class MultiBreakQML:
 
         return self
 
+    def get_parameters(self) -> dict[str, int | float]:
+        """Return a new dictionary of the current model configuration.
+
+        These are configuration settings, not fitted QML or LR results.
+        ``factor_criterion`` is returned in its internally normalized form.
+        """
+        return _DisplayDict({
+            "max_break": self.max_break,
+            "trim_ratio": self.trim_ratio,
+            "max_factors": self.max_factors,
+            "factor_criterion": self.factor_criterion,
+        })
+
     def set_parameters(
             self,
-            max_break: Optional[int] = None,
-            max_factors: Optional[int] = None,
-            factor_criterion: Optional[Union[int, str]] = None,
-            *,
-            trim_ratio: Optional[float] = None
+            trim_ratio: float | None = None,
+            max_factors: int | None = None,
+            factor_criterion: int | str | None = None,
+            max_break: int | None = None,
     ) -> "MultiBreakQML":
         """Update model settings and clear all cached results.
 
         Results returned by earlier calls are independent snapshots and remain
         unchanged. Future computations use the new settings. Configuration
-        attributes are read-only outside this method.
+        attributes may also be updated directly through validated assignment.
 
         Parameters
         ----------
-        max_break : int or None, default=None
-            New maximum number of breaks; ``None`` preserves the current
+        trim_ratio : float or None, default=None
+            New minimum regime-length ratio; ``None`` preserves the current
             value.
         max_factors : int or None, default=None
             New maximum number of factors; ``None`` preserves the current
             value.
         factor_criterion : int, str, or None, default=None
             New Bai--Ng criterion; ``None`` preserves the current value.
-        trim_ratio : float or None, keyword-only, default=None
-            New minimum regime-length ratio; ``None`` preserves the current
+        max_break : int or None, default=None
+            New maximum number of breaks; ``None`` preserves the current
             value.
 
         Returns

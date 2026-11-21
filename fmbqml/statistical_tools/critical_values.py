@@ -18,7 +18,6 @@ that implementation remains explicit.
 """
 
 from numbers import Integral, Real
-from typing import Optional, Tuple
 
 import numpy as np
 from joblib import Parallel, delayed
@@ -27,8 +26,20 @@ from fmbqml.statistical_tools.brownian import simulate_brownian_motion
 from fmbqml.statistical_tools.hac import hac_newey_west_94
 from fmbqml.utils.partition import optimize_additive_partition
 
-
 DEFAULT_CRITICAL_LEVELS = (0.90, 0.95, 0.99)
+
+
+def _validate_n_jobs(n_jobs):
+    """Validate joblib worker count; -1 or a positive integer is supported.
+
+    Raise TypeError for invalid types and ValueError for out-of-range integers.
+    """
+    if isinstance(n_jobs, (bool, np.bool_)) or not isinstance(n_jobs, Integral):
+        raise TypeError("n_jobs must be -1 or a positive integer.")
+    if n_jobs != -1 and n_jobs < 1:
+        raise ValueError("n_jobs must be -1 or a positive integer.")
+    return int(n_jobs)
+
 
 
 def factor_product_deviations(F_hat: np.ndarray) -> np.ndarray:
@@ -115,6 +126,11 @@ def _critical_values_from_simulated(
     levels=DEFAULT_CRITICAL_LEVELS,
     use_ceiling: bool = True,
 ) -> np.ndarray:
+    """Select empirical order statistics at the requested probability levels.
+
+    ``use_ceiling`` chooses ceiling or truncation for the one-based rank;
+    ranks below one are clamped to the smallest simulated statistic.
+    """
     ordered = np.sort(np.asarray(simulated, dtype=float))
     n_sim = len(ordered)
     indices = []
@@ -129,8 +145,9 @@ def simulate_single_sup_lr_critical_values(
     trim_ratio: float,
     n_sim: int = 5000,
     grid_size: int = 2000,
-    random_state: Optional[int] = None,
-) -> Tuple[np.ndarray, np.ndarray]:
+    random_state: int | None = None,
+    n_jobs: int = -1,
+) -> tuple[np.ndarray, np.ndarray]:
     """Simulate the limiting single-break sup-LR distribution.
 
     For every Monte Carlo draw, the routine constructs a Brownian bridge and
@@ -151,6 +168,9 @@ def simulate_single_sup_lr_critical_values(
     random_state : int or None, default=None
         Seed for reproducible simulation.
 
+    n_jobs : int, default=-1
+        Number of parallel workers. -1 uses all available CPUs.
+
     Returns
     -------
     critical_values : ndarray of shape (3,)
@@ -160,6 +180,7 @@ def simulate_single_sup_lr_critical_values(
         Sup-LR statistic from every Monte Carlo replication.
     """
     n_sim = _validate_n_sim(n_sim)
+    n_jobs = _validate_n_jobs(n_jobs)
     omega = np.asarray(omega, dtype=float)
     dimension = omega.shape[0]
     base_rng = np.random.default_rng(random_state)
@@ -192,7 +213,7 @@ def simulate_single_sup_lr_critical_values(
         return max(values)
 
     simulated = np.asarray(
-        Parallel(n_jobs=-1)(
+        Parallel(n_jobs=n_jobs)(
             delayed(monte_carlo_iteration)(seed) for seed in seeds
         ),
         dtype=float,
@@ -210,6 +231,7 @@ def critical_value_lr_hac_m(
     n_sim=5000,
     random_state=None,
     debug=False,
+    n_jobs=-1,
 ):
     """Compute HAC-based critical values for the single-break LR test.
 
@@ -233,6 +255,8 @@ def critical_value_lr_hac_m(
     debug : bool, default=False
         If True, print HAC eigenvalue diagnostics and the simulated critical
         values.
+    n_jobs : int, default=-1
+        Number of parallel workers in the Monte Carlo simulation.
 
     Returns
     -------
@@ -246,6 +270,7 @@ def critical_value_lr_hac_m(
         If ``F_hat`` is not two-dimensional or ``n_sim`` is not a positive
         integer.
     """
+    n_jobs = _validate_n_jobs(n_jobs)
     F_hat = np.asarray(F_hat, dtype=float)
     if F_hat.ndim != 2:
         raise ValueError("F_hat must be a 2D array.")
@@ -266,6 +291,7 @@ def critical_value_lr_hac_m(
         n_sim=n_sim,
         grid_size=2000,
         random_state=random_state,
+        n_jobs=n_jobs,
     )
 
     if debug:
@@ -322,8 +348,9 @@ def joint_sup_lr_cv(
     trim_ratio: float,
     n_sim: int,
     grid_size: int,
-    random_state: Optional[int],
-) -> Tuple[np.ndarray, np.ndarray]:
+    random_state: int | None,
+    n_jobs: int = -1,
+) -> tuple[np.ndarray, np.ndarray]:
     """Simulate the limiting joint multiple-break sup-LR distribution.
 
     Each replication constructs a Brownian bridge, scores every admissible
@@ -348,6 +375,9 @@ def joint_sup_lr_cv(
     random_state : int or None
         Seed for reproducible simulation.
 
+    n_jobs : int, default=-1
+        Number of parallel workers. -1 uses all available CPUs.
+
     Returns
     -------
     critical_values : ndarray of shape (3,)
@@ -364,6 +394,7 @@ def joint_sup_lr_cv(
     arguments other than ``n_sim``.
     """
     n_sim = _validate_n_sim(n_sim)
+    n_jobs = _validate_n_jobs(n_jobs)
     omega = np.asarray(omega, dtype=float)
     dimension = omega.shape[0]
     min_length = max(1, int(np.ceil(grid_size * trim_ratio)))
@@ -405,7 +436,7 @@ def joint_sup_lr_cv(
         return statistic
 
     simulated = np.asarray(
-        Parallel(n_jobs=-1)(
+        Parallel(n_jobs=n_jobs)(
             delayed(monte_carlo_iteration)(seed) for seed in seeds
         ),
         dtype=float,
@@ -437,9 +468,7 @@ def select_critical_value(cv, alpha: float) -> float:
         If alpha is not a supported significance level.
     """
     if isinstance(alpha, (bool, np.bool_)) or not isinstance(alpha, Real):
-        raise ValueError(
-            "alpha must be one of 0.10, 0.05, or 0.01."
-        )
+        raise TypeError("alpha must be a real number.")
 
     alpha_map = {0.10: 0, 0.05: 1, 0.01: 2}
 
@@ -461,7 +490,7 @@ __all__ = [
     "critical_value_lr_hac_m",
     "factor_long_run_covariance",
     "factor_product_deviations",
-    "select_critical_value",
     "joint_sup_lr_cv",
+    "select_critical_value",
     "simulate_single_sup_lr_critical_values",
 ]

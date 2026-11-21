@@ -1,127 +1,129 @@
-"""Single-break example for fmbqml."""
+"""Single-break estimation and testing with fmbqml.
 
-from pathlib import Path
+Demonstrates:
+- Single-break likelihood-ratio (LR) testing
+- QML breakpoint estimation
+- A no-break control
 
-import matplotlib
-matplotlib.use("Agg")
+Related paper section: Section 4.1.
+"""
 
-from matplotlib import pyplot as plt
+# Standalone example corresponding to the tutorial.
+# Requires fmbqml and numpy.
+# Run: python examples/single_break.py
+
 import numpy as np
 
 from fmbqml import SingleBreakQML
 
+print("\n" + "=" * 72)
+print("Single-break estimation and testing with fmbqml")
+print("=" * 72)
 
-def run_single_break_example(n_sim=5000):
-    """Run a simulated single-break example and a no-break control."""
-    rng = np.random.default_rng(2024)
-    T, N, r0 = 300, 100, 3
-    rho = 0.5
-    true_breakpoint = 100
+# 4.1. Generate the single-break panel
+print("\n[1/7] Generating the single-break panel...")
 
-    print("Single-break example")
-    print(f"T = {T}, N = {N}, r0 = {r0}, rho = {rho}")
-    print(f"True breakpoint = {true_breakpoint}")
+rng = np.random.default_rng(2024)
+T, N, r0 = 300, 100, 3
+rho = 0.5
+true_breakpoint = 100
 
-    # Generate the factor process.
-    u = rng.normal(0.0, np.sqrt(1.0 - rho**2), size=(T, r0))
-    F = np.zeros((T, r0))
-    F[0, :] = rng.normal(0.0, 1.0, size=r0)
-    for t in range(1, T):
-        F[t, :] = rho * F[t - 1, :] + u[t, :]
+# The factor process is stationary: Var(f_1) = I and Var(u_t) = (1-rho^2)I.
+u = rng.normal(0.0, np.sqrt(1.0 - rho**2), size=(T, r0))
+F = np.zeros((T, r0))
+F[0, :] = rng.normal(0.0, 1.0, size=r0)
+for t in range(1, T):
+    F[t, :] = rho * F[t - 1, :] + u[t, :]
 
-    # Generate loadings and idiosyncratic errors.
-    Lambda1 = rng.normal(0.0, 1.0, size=(N, r0))
-    Lambda2 = Lambda1 + rng.normal(0.0, 1.0, size=(N, r0))
-    E = rng.normal(0.0, np.sqrt(r0), size=(T, N))
+# Generate the pre-break and post-break loading matrices and idiosyncratic errors.
+Lambda1 = rng.normal(0.0, 1.0, size=(N, r0))
+Lambda2 = Lambda1 + rng.normal(0.0, 1.0, size=(N, r0))
+E = rng.normal(0.0, np.sqrt(r0), size=(T, N))
 
-    # Construct the panel with one loading break.
-    X = np.empty((T, N))
-    X[:true_breakpoint, :] = (
-        F[:true_breakpoint, :] @ Lambda1.T + E[:true_breakpoint, :]
-    )
-    X[true_breakpoint:, :] = (
-        F[true_breakpoint:, :] @ Lambda2.T + E[true_breakpoint:, :]
-    )
-    print(f"Generated data matrix X with shape {X.shape}")
+# The observed panel follows the one-break factor model.
+X = np.empty((T, N))
+X[:true_breakpoint, :] = (
+    F[:true_breakpoint, :] @ Lambda1.T + E[:true_breakpoint, :]
+)
+X[true_breakpoint:, :] = (
+    F[true_breakpoint:, :] @ Lambda2.T + E[true_breakpoint:, :]
+)
 
-    model = SingleBreakQML(
-        X,
-        trim_ratio=0.30,
-        max_factors=10,
-        factor_criterion="IC2",
-    )
+# 4.1. Initialize `SingleBreakQML` and perform the LR test
+print("\n[2/7] Performing the single-break LR test (Monte Carlo critical value)...")
 
-    print("\nLikelihood-ratio test")
-    lr_result = model.lr_test(
-        alpha=0.01,
-        classify=True,
-        n_sim=n_sim,
-        random_state=12345,
-    )
-    print(lr_result.summary())
+model = SingleBreakQML(
+    X,
+    trim_ratio=0.30,
+    max_factors=10,
+    factor_criterion="IC2",
+)
 
-    print("\nSelected LR-test results")
-    print(f"LR statistic: {lr_result.test_statistic:.4f}")
-    print(f"Critical value: {lr_result.critical_value:.4f}")
-    print(f"Reject H0: {lr_result.reject_null}")
-    print(f"Accepted breakpoint: {lr_result.breakpoint}")
-    print(f"Breakpoint type: {lr_result.break_type}")
+# Display the model configuration used for the LR test.
+print("Model parameters:")
+print(model.get_parameters())
 
-    output_dir = Path(__file__).resolve().parent / "output" / "figures"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    figure_path = output_dir / "single_break_lr_profile.png"
-    fig, _ = lr_result.plot_lr_profile(
-        true_break=true_breakpoint,
-        save_path=figure_path,
-        show=False,
-    )
-    plt.close(fig)
-    print(f"LR profile saved to: {figure_path}")
+lr_result = model.lr_test(
+    alpha=0.01,
+    classify=True,
+    n_sim=5000,
+    random_state=12345,
+)
+print(lr_result.summary())
 
-    print("\nDirect QML breakpoint estimation")
-    qml_result = model.estimate_breakpoint(classify=True)
-    print(qml_result.summary())
+# 4.1. Extract the LR-test results
 
-    figure_path = output_dir / "single_break_qml_profile.png"
-    fig, _ = qml_result.plot_qml_profile(
-        true_break=true_breakpoint,
-        save_path=figure_path,
-        show=False,
-    )
-    plt.close(fig)
-    print(f"QML profile saved to: {figure_path}")
-
-    # Construct a no-break panel using the same factors, first-regime
-    # loadings, and idiosyncratic errors.
-    X_null = F @ Lambda1.T + E
-    print(f"Generated no-break data matrix X_null with shape {X_null.shape}")
-
-    null_model = SingleBreakQML(
-        X_null,
-        trim_ratio=0.30,
-        max_factors=10,
-        factor_criterion="IC2",
-    )
-    print("\nNo-break control")
-    null_result = null_model.lr_test(
-        alpha=0.01,
-        classify=False,
-        n_sim=n_sim,
-        random_state=12345,
-    )
-    print(null_result.summary())
-
-    figure_path = output_dir / "no_break_lr_profile.png"
-    fig, _ = null_result.plot_lr_profile(save_path=figure_path, show=False)
-    plt.close(fig)
-    print(f"LR profile saved to: {figure_path}")
-
-    return {
-        "lr_result": lr_result,
-        "qml_result": qml_result,
-        "null_result": null_result,
-    }
+print("\nLR-test results:")
+print(f"  Test statistic : {lr_result.test_statistic:.4f}")
+print(f"  Critical value : {lr_result.critical_value:.4f}")
+print(f"  Reject null    : {lr_result.reject_null}")
+print(f"  Breakpoint     : {lr_result.breakpoint}")
+print(f"  Break type     : {lr_result.break_type}")
 
 
-if __name__ == "__main__":
-    run_single_break_example()
+# 4.1. Figure 1: LR profile
+print("\n[3/7] Displaying the LR profile...")
+
+lr_result.plot_lr_profile(true_break=true_breakpoint, show=True)
+
+# 4.1. Direct QML breakpoint estimation
+print("\n[4/7] Estimating the breakpoint directly using QML...")
+
+qml_result = model.estimate_breakpoint(classify=True)
+print(qml_result.summary())
+
+# 4.1. Construct the no-break control panel
+print("\n[5/7] Constructing the no-break control panel...")
+
+# Keep the same factors, first-regime loadings, and idiosyncratic errors.
+X_null = F @ Lambda1.T + E
+
+# 4.1. Test the no-break control panel
+print("\n[6/7] Testing the no-break control panel...")
+
+null_model = SingleBreakQML(
+    X_null,
+    trim_ratio=0.30,
+    max_factors=10,
+    factor_criterion="IC2",
+)
+null_result = null_model.lr_test(
+    alpha=0.01,
+    classify=False,
+    n_sim=5000,
+    random_state=12345,
+)
+print(null_result.summary())
+
+# Appendix A. Figure 3: QML objective profile for the single-break example
+print("\n[7/7] Displaying the appendix diagnostic profiles...")
+
+qml_result.plot_qml_profile(
+    true_break=true_breakpoint,
+    show=True,
+)
+
+# Appendix A. Figure 4: LR profile for the no-break control
+
+null_result.plot_lr_profile(show=True)
+

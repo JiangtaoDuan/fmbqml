@@ -1,16 +1,14 @@
 """Tests for single_break test_model."""
 
 import numpy as np
-
 import pandas as pd
-
 import pytest
+
+from fmbqml import SingleBreakQML
+from fmbqml.utils.breakpoint_utils import map_breakpoint_to_label
 
 from ._helpers import generate_panel_data, make_panel_data
 
-from fmbqml import SingleBreakQML
-
-from fmbqml.utils.breakpoint_utils import map_breakpoint_to_label
 
 def test_single_model_init_with_valid_numpy_array():
     X = generate_panel_data()
@@ -193,10 +191,27 @@ def test_set_parameters_invalid_trim_ratio_reverts_state():
     assert model.factor_criterion == old_factor_criterion
 
 
-def test_configuration_requires_setter():
+def test_configuration_direct_assignment_and_get_parameters():
     model = SingleBreakQML(make_panel_data(), max_factors=3)
+    initial = model.get_parameters()
+    assert set(initial) == {"trim_ratio", "max_factors", "factor_criterion"}
+    initial["max_factors"] = 123
+    assert model.max_factors == 3  # Returned mapping is independent.
+    model._F_hat = np.ones((model.T, 1))
+    model._test_results = {"breakpoint": 5}
+    model.trim_ratio = 0.2
+    assert model.trim_ratio == 0.2
+    assert model._F_hat is None and model._test_results == {}
+    model.factor_criterion = "PC1"
+    assert model.get_parameters()["factor_criterion"] == 3
+    model._test_results = {"breakpoint": 5}
+    with pytest.raises(ValueError):
+        model.trim_ratio = 0.8
+    assert model.trim_ratio == 0.2 and model._test_results == {"breakpoint": 5}
     with pytest.raises(AttributeError):
-        model.trim_ratio = 0.2
+        model.T = 10
+    with pytest.raises(AttributeError):
+        model.X = np.zeros_like(model.X)
 
 
 def test_single_break_public_boolean_options_are_validated():

@@ -1,7 +1,6 @@
 """Tests for factor_tools test_factor_tools."""
 
 import numpy as np
-
 import pytest
 
 from fmbqml.factor_tools.var_selection import fit_var

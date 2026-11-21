@@ -1,6 +1,6 @@
 # fmbqml
 
-[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![PyPI version](https://img.shields.io/pypi/v/fmbqml)](https://pypi.org/project/fmbqml/)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)](LICENSE.txt)
 ## Introduction
@@ -28,14 +28,8 @@ Install the released package from PyPI:
 python -m pip install fmbqml
 ```
 
-The package requires Python 3.8 or later. Its runtime dependencies are NumPy, SciPy, pandas, Matplotlib, and joblib.
+The package requires Python 3.10 or later. Its runtime dependencies are NumPy, SciPy, pandas, Matplotlib, and joblib.
 
-To run the test suite from a source checkout:
-
-```bash
-python -m pip install -e ".[test]"
-python -m pytest -q
-```
 
 ## Quickstart
 
@@ -44,6 +38,8 @@ The examples below use a finite panel-data matrix `X` with shape `(T, N)`, where
 ### Single-break analysis
 
 The following example generates panel data with a change in factor loadings and performs a single-break LR test.
+
+For both single-break and joint sup-LR tests, the `n_jobs` parameter controls the number of parallel workers used in Monte Carlo critical-value simulation. Its default value is `-1`, which uses all available CPU cores.
 
 ```python
 import numpy as np
@@ -169,7 +165,7 @@ In the joint sup-LR test, candidate breakpoints selected under the alternative a
 
 ## Examples
 
-Runnable Python scripts and Jupyter notebooks are available in the GitHub [`examples/`](https://github.com/JiangtaoDuan/fmbqml/tree/master/examples) directory. They cover the package's single-break and multiple-break workflows, including the FRED-MD empirical application.
+Runnable Python scripts are available in the GitHub [`examples/`](https://github.com/JiangtaoDuan/fmbqml/tree/master/examples) directory. They cover the package's single-break and multiple-break workflows, including the FRED-MD empirical application.
 
 The Sphinx documentation source is available in the GitHub [`docs/`](https://github.com/JiangtaoDuan/fmbqml/tree/master/docs) directory. It includes the user guide, API reference, software-design description, and validation information.
 
@@ -188,3 +184,30 @@ The following publications provide background on high-dimensional factor models 
 ## License
 
 `fmbqml` is distributed under the GNU General Public License, version 3 or (at your option) any later version (GPL-3.0-or-later). See [LICENSE.txt](LICENSE.txt) for the full license.
+
+### Updating model configuration
+
+Both `SingleBreakQML` and `MultiBreakQML` provide `get_parameters()` to read
+current configuration and `set_parameters()` to change it. Configuration can
+also be modified directly; all successful changes invalidate derived model
+state, and invalid changes leave existing state intact.
+
+```python
+model = SingleBreakQML(X, max_factors=5)
+settings = model.get_parameters()
+model.set_parameters(trim_ratio=0.2)
+model.max_factors = 4
+```
+
+Both models accept the shared settings as positional or keyword arguments,
+in the order `trim_ratio`, `max_factors`, and `factor_criterion`. For example,
+`model.set_parameters(0.2, 4)` is equivalent to
+`model.set_parameters(trim_ratio=0.2, max_factors=4)`. The multiple-break
+model also accepts `max_break` as the fourth argument or by keyword. Earlier
+multiple-break versions used `max_break` as the first positional argument;
+update those calls to use `max_break=...`.
+
+The configuration dictionary contains `trim_ratio`, `max_factors`, and
+`factor_criterion` (as a normalized integer), plus `max_break` for
+`MultiBreakQML`. To change panel data use `set_data(new_X)`; assigning to
+`model.X`, `model.T`, or `model.N` is not supported.

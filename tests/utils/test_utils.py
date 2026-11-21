@@ -1,16 +1,13 @@
 """Tests for utils test_utils."""
 
 import numpy as np
-
 import pytest
-
-from fmbqml.utils.partition import optimize_additive_partition
 
 from fmbqml.utils.breakpoint_utils import (
     calculate_break_range,
     compute_min_segment_length,
 )
-
+from fmbqml.utils.partition import optimize_additive_partition
 from fmbqml.utils.safe_logdet import safe_logdet
 
 

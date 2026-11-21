@@ -1,26 +1,25 @@
 """Object-oriented interface for single-break QML procedures."""
 
+import logging
 from copy import deepcopy
 from time import perf_counter
-import logging
-
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
+import fmbqml.utils as U
 from fmbqml.break_tools import classify_breakpoint_result
 from fmbqml.factor_tools import (
     bai_ng_factor_count,
     estimate_panel_factors_lr,
 )
-
 from fmbqml.single_break.qml_profile import compute_single_break_qml_profile
 from fmbqml.statistical_tools import critical_value_lr_hac_m, select_critical_value
-import fmbqml.utils as U
+from fmbqml.statistical_tools.critical_values import _validate_n_jobs
+from fmbqml.utils.formatting import _DisplayDict, _FactorEstimatesDict
 
 from .results import SingleBreakResults
-
 
 _logger = logging.getLogger(__name__)
 
@@ -36,17 +35,42 @@ class SingleBreakQML:
     and direct breakpoint-estimation results are stored separately.
     """
 
-    # Configuration and data are updated only through validated setters.
+    # Data and dimensions are protected; configuration changes use validated setters.
     _PROTECTED_SETTINGS = ('T', 'N', 'trim_ratio', 'max_factors', 'factor_criterion')
+
+    _CONFIG_SETTINGS = ("trim_ratio", "max_factors", "factor_criterion")
 
     def __setattr__(self, name: str, value: Any) -> None:
         if name == "_X" and "_X" in self.__dict__:
             raise AttributeError("Internal panel data cannot be replaced directly; use set_data().")
-        if name in self._PROTECTED_SETTINGS and name in self.__dict__:
-            raise AttributeError(
-                f"{name} is read-only; use set_parameters() or set_data() instead."
-            )
+        if name in self._CONFIG_SETTINGS and name in self.__dict__:
+            self.set_parameters(**{name: value})
+            return
+        if name in ("T", "N") and name in self.__dict__:
+            raise AttributeError(f"{name} is read-only; use set_data() instead.")
         super().__setattr__(name, value)
+
+    @property
+    def factors_(self) -> np.ndarray:
+        """Estimated common-factor matrix, computed and cached on first access.
+
+        Returns a copy so callers cannot modify the model's internal cache.
+        The factor estimates are recomputed after a successful configuration
+        update or data replacement.
+        """
+        estimates = self.get_factor_estimates(recalculate=False)
+        return estimates["F_hat"]
+
+    @property
+    def factor_loadings_(self) -> np.ndarray:
+        """Estimated factor-loading matrix, computed and cached on first access.
+
+        Returns a copy so callers cannot modify the model's internal cache.
+        The factor estimates are recomputed after a successful configuration
+        update or data replacement.
+        """
+        estimates = self.get_factor_estimates(recalculate=False)
+        return estimates["L_hat"]
 
     @property
     def X(self) -> np.ndarray:
@@ -66,10 +90,10 @@ class SingleBreakQML:
 
     def __init__(
             self,
-            X: Union[np.ndarray, pd.DataFrame],
+            X: np.ndarray | pd.DataFrame,
             trim_ratio: float = 0.30,
             max_factors: int = 10,
-            factor_criterion: Union[int, str] = "IC1"
+            factor_criterion: int | str = "IC1"
     ) -> None:
         """
         Initialize a SingleBreakQML object for structural break detection,
@@ -135,7 +159,7 @@ class SingleBreakQML:
         self._estimation_results = {}
         self._last_result_type = None
 
-    def _get_active_results(self) -> Dict[str, Any]:
+    def _get_active_results(self) -> dict[str, Any]:
         """Return the result dictionary associated with the latest procedure."""
         if self._last_result_type == "test" and self._test_results:
             return self._test_results
@@ -149,7 +173,7 @@ class SingleBreakQML:
             "Run lr_test() or estimate_breakpoint() before accessing results."
         )
 
-    def _set_active_results(self, result_type: str, results: Dict[str, Any]) -> None:
+    def _set_active_results(self, result_type: str, results: dict[str, Any]) -> None:
         """Store results separately and mark the procedure as the latest analysis."""
         if result_type == "test":
             self._test_results = results
@@ -173,7 +197,7 @@ class SingleBreakQML:
         nb_factors_result = bai_ng_factor_count(self.X, self.max_factors)
         return int(nb_factors_result['khat'][self.factor_criterion])
 
-    def _calculate_factors(self, *, recalculate: bool = False) -> Tuple[int, np.ndarray]:
+    def _calculate_factors(self, *, recalculate: bool = False) -> tuple[int, np.ndarray]:
         """
         Return cached factors or estimate them when needed.
 
@@ -282,7 +306,8 @@ class SingleBreakQML:
             alpha: float = 0.01,
             classify: bool = True,
             n_sim: int = 5000,
-            random_state: Optional[int] = None
+            random_state: int | None = None,
+            n_jobs: int = -1
     ) -> SingleBreakResults:
         """
         Perform the likelihood ratio (LR) test for a structural break.
@@ -298,6 +323,8 @@ class SingleBreakQML:
             Number of Monte Carlo replications used to compute critical values.
         random_state : int or None, default=None
             Random seed used for reproducible Monte Carlo simulation.
+        n_jobs : int, default=-1
+            Number of parallel Monte Carlo workers; -1 uses all CPUs.
 
         Returns
         -------
@@ -326,6 +353,7 @@ class SingleBreakQML:
         classify = U.validate_boolean(classify, "classify")
         n_sim = U.validate_positive_integer(n_sim, "n_sim")
         random_state = U.validate_random_state(random_state)
+        n_jobs = _validate_n_jobs(n_jobs)
 
         start_time = perf_counter()
         _logger.info(
@@ -341,7 +369,8 @@ class SingleBreakQML:
             F_hat,
             self.trim_ratio,
             n_sim=n_sim,
-            random_state=random_state
+            random_state=random_state,
+            n_jobs=n_jobs,
         )
 
         qml_profile = compute_single_break_qml_profile(
@@ -369,11 +398,12 @@ class SingleBreakQML:
 
         result_rej = lr_stat > level
 
-        # breakpoint means "accepted estimated break after LR rejection"
+        # ``breakpoint`` stores the accepted location only when the LR test
+        # rejects the null hypothesis.
         breakpoint = hatk if result_rej else None
 
-        # candidate_breakpoint means the maximizer of LR profile,
-        # regardless of whether the LR test rejects the null.
+        # ``candidate_breakpoint`` stores the LR-profile maximizer under H1,
+        # regardless of whether the null hypothesis is rejected.
         candidate_breakpoint = hatk
 
         break_label = U.map_breakpoint_to_label(breakpoint, self._row_index)
@@ -542,7 +572,7 @@ class SingleBreakQML:
 
 
 
-    def get_data(self) -> Union[np.ndarray, pd.DataFrame]:
+    def get_data(self) -> np.ndarray | pd.DataFrame:
         """
         Return the input data in its original format.
 
@@ -553,7 +583,7 @@ class SingleBreakQML:
         """
         return self._original_data.copy()
 
-    def get_factor_estimates(self, recalculate: bool = False) -> Dict[str, Any]:
+    def get_factor_estimates(self, recalculate: bool = False) -> dict[str, Any]:
         """
         Return estimated factors and loadings.
 
@@ -569,9 +599,12 @@ class SingleBreakQML:
 
             - F_hat : estimated factor matrix
             - L_hat : estimated loading matrix
-            - VNT : normalization constant
+            - VNT : (r, r) diagonal matrix of leading eigenvalues
             - estimated_factors : number of factors
             - factor_criterion : Bai-Ng criterion index used for factor selection
+
+        Array entries display their shape and a short sample; indexing the
+        returned dictionary gives the complete independent arrays.
         """
 
         recalculate = U.validate_boolean(recalculate, "recalculate")
@@ -580,17 +613,17 @@ class SingleBreakQML:
         elif self._F_hat is None or self._L_hat is None or self._VNT is None:
             self._calculate_factors()
 
-        return {
+        return _FactorEstimatesDict({
             'F_hat': self._F_hat.copy() if self._F_hat is not None else None,
             'L_hat': self._L_hat.copy() if self._L_hat is not None else None,
             'VNT': self._VNT.copy() if hasattr(self._VNT, 'copy') else self._VNT,
             'estimated_factors': self._nbhat_r,
             'factor_criterion': self.factor_criterion
-        }
+        })
 
     def set_data(
             self,
-            new_data: Union[np.ndarray, pd.DataFrame]
+            new_data: np.ndarray | pd.DataFrame
     ) -> "SingleBreakQML":
         """Replace the panel data and clear all cached results.
 
@@ -636,17 +669,29 @@ class SingleBreakQML:
 
         return self
 
+    def get_parameters(self) -> dict[str, int | float]:
+        """Return a new dictionary of the current model configuration.
+
+        These are configuration settings, not fitted QML or LR results.
+        ``factor_criterion`` is returned in its internally normalized form.
+        """
+        return _DisplayDict({
+            "trim_ratio": self.trim_ratio,
+            "max_factors": self.max_factors,
+            "factor_criterion": self.factor_criterion,
+        })
+
     def set_parameters(
             self,
-            trim_ratio: Optional[float] = None,
-            max_factors: Optional[int] = None,
-            factor_criterion: Optional[Union[int, str]] = None
+            trim_ratio: float | None = None,
+            max_factors: int | None = None,
+            factor_criterion: int | str | None = None
     ) -> "SingleBreakQML":
         """Update model settings and clear all cached results.
 
         Results returned by earlier calls are independent snapshots and remain
         unchanged. Future computations use the new settings. Configuration
-        attributes are read-only outside this method.
+        attributes may also be updated directly through validated assignment.
 
         Parameters
         ----------

@@ -6,6 +6,6 @@ from .panel_factors_lr import estimate_panel_factors_lr
 
 __all__ = [
     "bai_ng_factor_count",
-    "estimate_panel_factors_lr",
     "estimate_panel_factors",
+    "estimate_panel_factors_lr",
 ]

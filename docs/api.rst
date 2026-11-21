@@ -31,6 +31,14 @@ Result classes
 Main analysis methods
 ---------------------
 
+The LR-test methods ``SingleBreakQML.lr_test()`` and
+``MultiBreakQML.joint_sup_lr_test()`` accept ``n_jobs`` to control
+parallel Monte Carlo simulation. The default ``n_jobs=-1`` uses all
+available joblib workers; set ``n_jobs=1`` to use one worker or a positive
+integer to limit concurrent workers. The number of simulations is separately
+controlled by ``n_sim``. The accepted values for ``n_jobs`` are ``-1``
+and positive integers.
+
 ``SingleBreakQML`` provides:
 
 * ``lr_test()`` to test the null hypothesis of no structural break against
@@ -48,11 +56,55 @@ Main analysis methods
   with a prespecified number of breaks.
 * ``get_factor_estimates()`` to retrieve the estimated factors and loadings.
 
-Both model classes provide ``get_data()``, ``set_data()``, and
-``set_parameters()`` for accessing or updating model inputs and settings.
-Updates are validated before the model is mutated. A successful update clears
-derived caches, while previously returned result objects remain independent
-snapshots.
+Both model classes provide ``factors_`` and ``factor_loadings_`` properties
+for direct access to copies of the estimated factor and loading matrices.
+These properties compute the factor estimates on first access and reuse the
+model cache until the data or configuration changes.
+
+Both model classes provide ``get_data()`` and ``set_data()`` for accessing
+or replacing panel data, and ``get_parameters()`` and ``set_parameters()``
+for reading or updating model configuration. The configuration attributes
+can also be changed by direct assignment (e.g., ``model.trim_ratio = 0.2``).
+All configuration updates are validated before the model is mutated and
+clear derived caches on success. Invalid updates leave the previous configuration
+and caches intact; previously returned result objects remain independent
+snapshots. Panel data and sample dimensions cannot be replaced by assignment;
+use ``set_data()`` instead.
+
+Accessing factor estimates
+--------------------------
+
+The factor and loading matrices can be retrieved separately from either
+model class::
+
+   factors = model.factors_
+   loadings = model.factor_loadings_
+
+Both properties return independent NumPy array copies. Their shapes are
+``(T, r)`` for the estimated common factors and ``(N, r)`` for the factor
+loadings, where ``r`` is the selected number of factors. The complete
+factor-estimation dictionary remains available through
+``model.get_factor_estimates()``. Its display summarizes each array by shape
+and a short sample; indexing the dictionary returns the complete array.
+
+
+Exporting result dictionaries
+-----------------------------
+
+Both result classes provide ``to_dict(include_diagnostics=True)``. The
+method returns an independent Python dictionary. By default, all stored
+fields are included for backward compatibility. Set
+``include_diagnostics=False`` to omit large diagnostic paths and arrays while
+keeping the principal test or estimation results. For single-break results,
+this omits ``candidate_breaks``, ``lr_profile``, and ``qml_profile``. For
+multiple-break results, it omits ``ic_path`` and ``simulated_statistics``.
+
+The returned dictionary displays one top-level field per line::
+
+   print(result.to_dict(include_diagnostics=False))
+
+It is a dictionary subclass and can be indexed and modified as usual.
+
 
 Interpreting breakpoint results
 -------------------------------
@@ -111,9 +163,5 @@ Bai--Ng criteria are ``IC1``, ``IC2``, ``IC3``, ``PC1``, ``PC2``, ``PC3``,
 (default 0.10). The trimming ratio determines the admissible breakpoint
 search region or minimum regime length used by the corresponding procedure.
 
-The former model-level accessors and reporting methods
-``get_test_results()``, ``get_joint_results()``,
-``get_joint_test_results()``, ``get_breakpoint()``, ``get_breakpoints()``,
-``is_rejected()``, and model-level summary or plotting methods are not the
-current public access pattern. Capture and use the result object returned
-by each analysis method instead.
+Access analysis results through the result object returned by each analysis
+method. Summary and plotting methods are also available on that object.

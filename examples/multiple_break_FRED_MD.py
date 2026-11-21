@@ -1,141 +1,166 @@
-"""Multiple-break detection in the FRED-MD dataset.
+"""FRED-MD empirical application with fmbqml.
 
-Converted from multiple_break_FRED_MD.ipynb. Run from this examples/ directory
-(for example, ``python multiple_break_FRED_MD.py``) with fmbqml installed.
+Demonstrates:
+- Empirical multiple-break analysis using the November 2025 FRED-MD vintage
+- Baseline information-criterion path
+- Sensitivity analysis for the maximum candidate number of breaks
+- The extended information-criterion path in Appendix C
+
+Related paper sections: Section 5.5 and Appendix C.
+
+The source example includes the FRED-MD data and preprocessing routines in
+examples/fred_md/. These example files are not part of the installed package.
 """
 
-# %% [markdown]
-# # Multiple-Break Detection in the FRED-MD Dataset#
-# We apply the proposed method to the FRED-MD (Federal Reserve Economic Data - Monthly Data) dataset to illustrate its empirical performance in detecting structural breakpoints in macroeconomic time series. The FRED database is maintained by the Research Division of the Federal Reserve Bank of St. Louis, and the data are publicly available and continuously updated. The raw sample contains 126 monthly macroeconomic series spanning from January 1959 to November 2025; the processed balanced panel is used for estimation. According to the standard FRED-MD classification, these series are grouped into eight economic categories: output and income, labor market, housing, consumption (including orders and inventories), money and credit, interest and exchange rates, prices, and the stock market.
+import os
+import sys
+from pathlib import Path
 
-# %% Code cell 1
 import numpy as np
 import pandas as pd
 
-from fred.remove_outliers import remove_outliers
-from fred.prepare_missing import prepare_missing
-from fred.factors_em import factors_em
+# Allow this source example to run directly from any working directory.
+source_root = Path(__file__).resolve().parent.parent
+if (source_root / "fmbqml" / "__init__.py").is_file():
+    sys.path.insert(0, str(source_root))
+
 from fmbqml import MultiBreakQML
 
-# %% [markdown]
-# Using the FRED-MD macroeconomic database, this study first preprocesses the raw time-series data. Missing values in the original dataset are imputed using the expectation-maximization (**EM**) algorithm. Subsequently, variable-specific transformation rules, such as differencing or log-differencing, are applied to obtain approximately stationary time series, and outlying observations are adjusted accordingly. After these preprocessing steps, each macroeconomic variable contains a balanced monthly sample of length (T=801). Next, the information criteria proposed by Bai and Ng (2002) are employed to determine the optimal number of common factors within a prespecified maximum-factor range; in this study, the **IC2** criterion is used. Once the number of factors is selected, the latent common factors are estimated using a principal components approach combined with the **EM** algorithm, which yields stable factor series even in the presence of missing observations. The resulting factor matrix is then organized with time as the index and used for subsequent econometric analysis. For detailed descriptions of the construction of the FRED-MD dataset and the variable transformation procedures, see McCracken and Ng (2016). The first five observations of the processed data are also reported in the paper for illustration.
+print("\n" + "=" * 72)
+print("FRED-MD empirical application with fmbqml")
+print("=" * 72)
 
-# %% Code cell 2
-from pathlib import Path
+def find_replication_root():
+    """Locate bundled data and preprocessing modules without changing the data."""
+    candidates = []
+    override = os.environ.get("FMBQML_REPLICATION_ROOT")
+    if override:
+        override_path = Path(override).expanduser()
+        candidates.extend([override_path, override_path / "examples"])
+    candidates.extend([Path(__file__).resolve().parent, *Path(__file__).resolve().parents])
+    candidates.extend([Path.cwd(), *Path.cwd().parents])
+    for root in candidates:
+        fred_dir = root / "fred_md"
+        required = [fred_dir / "data" / "FRED_MD_2025_11.csv"]
+        required.extend(fred_dir / name for name in (
+            "__init__.py", "factors_em.py", "remove_outliers.py", "prepare_missing.py"
+        ))
+        if all(path.is_file() for path in required):
+            return root.resolve()
+    raise FileNotFoundError(
+        "Could not find the FRED-MD data and preprocessing modules. "
+        "Ensure examples/fred_md/ is present, or set FMBQML_REPLICATION_ROOT "
+        "to the directory containing fred_md/ or to the project root."
+    )
 
-EXAMPLES_DIR = Path(__file__).resolve().parent
-input_csv = EXAMPLES_DIR / "data" / "FRED_MD_2025_11.csv"
+PROJECT_ROOT = find_replication_root()
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-demean_method = 2
-factor_ic_method = 2
-max_factors = 8
-min_segment_length = 20
-max_breaks = 5
+from fred_md.factors_em import factors_em
+from fred_md.prepare_missing import prepare_missing
+from fred_md.remove_outliers import remove_outliers
 
-# ========================================================================
-# PART 1: LOAD AND LABEL DATA
-# ========================================================================
+# 5.5. Prepare the FRED-MD November 2025 vintage
+print("\n[1/5] Loading and preprocessing the November 2025 FRED-MD vintage...")
 
-fred_df = pd.read_csv(input_csv)
+# Load the November 2025 vintage of the FRED-MD dataset.
+fred_file = PROJECT_ROOT / "fred_md" / "data" / "FRED_MD_2025_11.csv"
 
-transform_codes = fred_df.iloc[0, 1:].astype(float).astype(int).to_numpy()
-raw_data = fred_df.iloc[1:, 1:].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+if not fred_file.exists():
+    raise FileNotFoundError(
+        f"FRED-MD vintage file not found: {fred_file}. "
+        "Ensure the source example's fred_md/data directory is present."
+    )
 
+fred_df = pd.read_csv(fred_file)
+
+# Extract the transformation codes and raw observations.
+transform_codes = (
+    fred_df.iloc[0, 1:].astype(float).astype(int).to_numpy()
+)
+
+raw_data = (
+    fred_df.iloc[1:, 1:]
+    .apply(pd.to_numeric, errors="coerce")
+    .to_numpy(dtype=float)
+)
+
+# Construct the monthly calendar range based on the final date in the dataset.
 date_column = fred_df.columns[0]
 date_strings = fred_df[date_column].astype(str)
-
 final_date = pd.to_datetime(date_strings.iloc[-1], errors="coerce")
-if pd.isna(final_date):
-    raise ValueError("Cannot parse final date from CSV first column.")
 
-final_month = final_date.month
-final_year = final_date.year
+if pd.isna(final_date):
+    raise ValueError("Could not parse the final date in the FRED-MD vintage.")
 
 monthly_dates = pd.date_range(
     start="1959-01-01",
-    end=f"{final_year:04d}-{final_month:02d}-01",
-    freq="MS"
+    end=f"{final_date.year:04d}-{final_date.month:02d}-01",
+    freq="MS",
 )
 
 num_raw_dates = len(monthly_dates)
 raw_data = raw_data[:num_raw_dates, :]
 
-# ========================================================================
-# PART 2: PROCESS DATA
-# ========================================================================
-
+# Apply the FRED-MD transformation codes and remove the initial
+# observations lost through differencing.
 transformed_data = prepare_missing(raw_data, transform_codes)
-
 transformed_data = transformed_data[2:num_raw_dates, :]
 
+# Treat outliers in the transformed panel.
 clean_data, outlier_counts = remove_outliers(transformed_data)
 
-# ========================================================================
-# PART 3: EM IMPUTATION
-# ========================================================================
+# Set the factor-selection and demeaning options for EM completion.
+max_factors = 8
+factor_ic_method = 2
+demean_method = 2
 
-# Suppress iteration-by-iteration EM diagnostics; set verbose=True to display them.
-residuals, em_factors, loadings, eigenvalues, filled_data = factors_em(
+# Estimate the factor structure and obtain the completed panel.
+_, _, _, _, filled_data = factors_em(
     clean_data,
     max_factors,
     factor_ic_method,
     demean_method,
-    verbose=False,
 )
 
+# Standardize each series using its sample mean and standard deviation.
+sample_size, num_series = filled_data.shape
 
-# ========================================================================
-# PART 4: FULL-SAMPLE STANDARDIZATION
-# ========================================================================
-
-em_filled_data = filled_data
-sample_size, num_series = em_filled_data.shape
-
-column_means = np.mean(em_filled_data, axis=0)
-column_stds = np.std(em_filled_data, axis=0, ddof=1)
+column_means = np.mean(filled_data, axis=0)
+column_stds = np.std(filled_data, axis=0, ddof=1)
 column_stds[column_stds == 0] = 1.0
 
-standardized_data = (em_filled_data - column_means) / column_stds
+standardized_data = (filled_data - column_means) / column_stds
 
-print("\n============================================================")
-print("FRED-MD empirical application with MultiBreakQML")
-print(f"Vintage file: {input_csv}")
-print(f"After EM + outlier replacement: T = {sample_size}, N = {num_series}")
-print(
-    f"Minimum segment length h = {min_segment_length} months, "
-    f"trim_ratio = {min_segment_length / sample_size:.4f}"
-)
-print(f"Candidate #breaks: m = 0,1,...,{max_breaks}")
-print("============================================================\n")
-
-
-# ========================================================================
-# PART 5: CREATE CALENDAR INDEX
-# ========================================================================
-
-start_year = 1959
-start_month = 3
-
+# Construct monthly labels corresponding to the retained observations,
+# starting in March 1959 after removing the first two observations.
 calendar_labels = []
+
 for time_index in range(1, sample_size + 1):
-    month_offset = (start_month - 1) + (time_index - 1)
-    year = start_year + month_offset // 12
+    month_offset = 2 + (time_index - 1)
+    year = 1959 + month_offset // 12
     month = month_offset % 12 + 1
     calendar_labels.append(f"{year:04d}-{month:02d}")
 
-# %% [markdown]
-# After obtaining the EM-imputed and standardized panel, the `MultiBreakQML` procedure is employed to detect structural changes in its latent factor structure. Specifically, the standardized panel is used to construct a `MultiBreakQML` object, with the maximum number of allowable breakpoints set to `max_break=5`, the upper bound on the number of candidate factors set to `max_factors=8`, `factor_criterion=1` (i.e., **IC2**) adopted for factor-dimension selection, and `trim_ratio=20/T` corresponding to a minimum segment length of approximately 20 observations. Subsequently, the method `estimate_breaks_jointly(min_break=0, classify=True)` is called to jointly estimate the breakpoint locations and model dimension. Here, setting `min_break=0` allows for the possibility of no structural break, so the procedure can simultaneously determine whether structural breaks are present in the data. The object-level `trim_ratio` parameter controls the minimum admissible segment length used in model selection and breakpoint determination. Since `classify=True`, the method also classifies the type of each estimated breakpoint. Ultimately, the procedure returns the estimated set of breakpoints, the corresponding number of breakpoints, and the type of each breakpoint, thereby providing a basis for subsequent segmented analysis and the study of structural changes.
+# 5.5. Construct the indexed FRED-MD panel and estimate breakpoints
+print("\n[2/5] Estimating structural breaks in the FRED-MD panel...")
 
-# %% Code cell 3: Joint breakpoint estimation
-qml_panel = pd.DataFrame(standardized_data, index=calendar_labels)
+qml_panel = pd.DataFrame(
+    standardized_data,
+    index=calendar_labels,
+)
 
+min_segment_length = 20
+max_breaks = 5
+max_factors = 8
 
 model = MultiBreakQML(
     qml_panel,
     max_break=max_breaks,
     max_factors=max_factors,
     factor_criterion="IC2",
-    trim_ratio=min_segment_length / len(qml_panel)
+    trim_ratio=min_segment_length / len(qml_panel),
 )
 
 result = model.estimate_breaks_jointly(
@@ -144,37 +169,22 @@ result = model.estimate_breaks_jointly(
 )
 print(result.summary())
 
-# %% Code cell 4: Breakpoint dates and classification details
-# Access commonly used results through dedicated public attributes.
-print("\nFinal result:")
-print("Number of breaks:", result.n_breaks)
-print("Breakpoints:", result.breakpoints)
-print("Break dates:", result.break_labels or [])
-print("Breakpoint types:", result.break_types)
+# 5.5. Display the baseline information-criterion path
+print("\n[3/5] Displaying the baseline information-criterion path...")
 
-# The detailed factor counts are advanced classification diagnostics.
-# No dedicated getter is currently provided for these fields.
-classification_details = result.to_dict()
-print("Regime factors:", classification_details.get("regime_factors"))
-print("Combined factors:", classification_details.get("combined_factors"))
+print(result.format_ic_path_table())
 
-# %% [markdown]
-# ## Main text, Section 5.5: Sensitivity to the maximum number of breaks
-# Following Table 10, the baseline specification is compared with max_break values
-# of 4, 5, 6, and 7. The preprocessing, factor-selection settings, and minimum
-# segment length are held fixed.
+# 5.5. Sensitivity to the maximum candidate number of breaks
+print("\n[4/5] Running sensitivity analysis for the maximum candidate number of breaks...")
 
-# %% Code cell 5: Main-text sensitivity analysis
-from pathlib import Path
+sensitivity_grid = (4, 5, 6, 7)
+sensitivity_rows = []
+extended_fred_result = None
 
-max_break_grid = (4, 5, 6, 7)
-max_break_sensitivity_results = {}
-max_break_sensitivity_rows = []
-
-for candidate_max_break in max_break_grid:
+for candidate_max_break in sensitivity_grid:
     if candidate_max_break == max_breaks:
-        sensitivity_model = model
-        sensitivity_result = result
+        # Reuse the baseline estimate rather than fitting max_break=5 twice.
+        candidate_result = result
     else:
         sensitivity_model = MultiBreakQML(
             qml_panel,
@@ -183,95 +193,74 @@ for candidate_max_break in max_break_grid:
             factor_criterion="IC2",
             trim_ratio=min_segment_length / len(qml_panel),
         )
-        sensitivity_result = sensitivity_model.estimate_breaks_jointly(
+        classify_for_appendix = candidate_max_break == 7
+        candidate_result = sensitivity_model.estimate_breaks_jointly(
             min_break=0,
-            classify=False,
+            classify=classify_for_appendix,
         )
+        if classify_for_appendix:
+            extended_fred_result = candidate_result
 
-    max_break_sensitivity_results[candidate_max_break] = sensitivity_result
-    estimated_breakpoints = sensitivity_result.breakpoints
-    estimated_dates = [qml_panel.index[k - 1] for k in estimated_breakpoints]
-
-    max_break_sensitivity_rows.append({
+    sensitivity_rows.append({
         "max_break": candidate_max_break,
-        "Selected number of breaks": sensitivity_result.n_breaks,
-        "Estimated break dates": ", ".join(map(str, estimated_dates)),
+        "Selected number of breaks": candidate_result.n_breaks,
+        "Estimated breakpoints": candidate_result.breakpoints,
+        "Estimated break dates": candidate_result.break_labels,
     })
 
-max_break_sensitivity_table = pd.DataFrame(max_break_sensitivity_rows)
-print("\nSensitivity analysis (main-text Table 10):")
-print(max_break_sensitivity_table.to_string(index=False))
+sensitivity_table = pd.DataFrame(sensitivity_rows)
+print("\nSensitivity to the maximum candidate number of breaks:")
+print(sensitivity_table.to_string(index=False))
 
-table_output_dir = EXAMPLES_DIR / "output" / "tables"
-table_output_dir.mkdir(parents=True, exist_ok=True)
-csv_path = table_output_dir / "fred_md_max_break_sensitivity.csv"
-latex_path = table_output_dir / "fred_md_max_break_sensitivity.tex"
+# Appendix C. Extended FRED-MD information-criterion path
+print("\n[5/5] Computing the extended information-criterion path for Appendix C...")
 
-max_break_sensitivity_table.to_csv(csv_path, index=False)
-max_break_sensitivity_table.to_latex(
-    latex_path,
-    index=False,
-    caption="Sensitivity of FRED-MD break estimates to the maximum number of breaks.",
-    label="tab:fred_md_max_break_sensitivity",
-)
+# Appendix C is executed in every complete tutorial run. The max_break=7
+# fit from the Section 5.5 sensitivity analysis is reused when available.
+if extended_fred_result is not None:
+    fred_results = extended_fred_result
+else:
+    fred_model = MultiBreakQML(
+        qml_panel,
+        max_break=7,
+        max_factors=8,
+        factor_criterion="IC2",
+        trim_ratio=min_segment_length / len(qml_panel),
+    )
+    fred_results = fred_model.estimate_breaks_jointly(
+        min_break=0,
+        classify=True,
+    )
+print(fred_results.summary())
 
-print(f"CSV table saved to: {csv_path}")
-print(f"LaTeX table saved to: {latex_path}")
+print("\nExtended information-criterion path (m = 0,...,7):")
+print(fred_results.format_ic_path_table())
 
+appendix_breakpoints = fred_results.breakpoints or []
+appendix_labels = fred_results.break_labels or []
+appendix_types = fred_results.break_types or []
 
-# %% [markdown]
-# ## Appendix C: Additional results for the FRED-MD case
-# Appendix C expands the candidate number of breaks to m = 0,...,7 while keeping
-# T, N, max_factors, IC2, and the minimum segment length unchanged. It reports
-# the complete information-criterion path and the classification of the selected
-# five breakpoints. No figures are generated.
+print("\nSelected model under the extended candidate range:")
+print("  Number of breaks:", fred_results.n_breaks)
+print("  Breakpoints:", appendix_breakpoints if appendix_breakpoints else "None")
+print("  Break dates:", appendix_labels if appendix_labels else "None")
 
-# %% Code cell 6: Appendix C - expanded IC path and classification
-appendix_max_break = 7
+if appendix_breakpoints:
+    classification_rows = []
+    for index, breakpoint in enumerate(appendix_breakpoints):
+        classification_rows.append({
+            "Breakpoint": int(breakpoint),
+            "Date": (
+                appendix_labels[index]
+                if index < len(appendix_labels) else ""
+            ),
+            "Type": (
+                appendix_types[index]
+                if index < len(appendix_types) else ""
+            ),
+        })
+    print("\nBreak-type classification under the extended candidate range:")
+    print(pd.DataFrame(classification_rows).to_string(index=False))
+else:
+    print("\nNo breakpoints were selected under the extended candidate range.")
 
-appendix_model = MultiBreakQML(
-    qml_panel,
-    max_break=appendix_max_break,
-    max_factors=max_factors,
-    factor_criterion="IC2",
-    trim_ratio=min_segment_length / len(qml_panel),
-)
-
-appendix_result = appendix_model.estimate_breaks_jointly(
-    min_break=0,
-    classify=True,
-)
-
-print("\nAppendix C - joint-estimation summary:")
-print(appendix_result.summary())
-
-print("\nAppendix C - complete information-criterion path (m = 0,...,7):")
-print(appendix_result.format_ic_path_table())
-
-appendix_breakpoints = appendix_result.breakpoints
-appendix_break_dates = [qml_panel.index[k - 1] for k in appendix_breakpoints]
-
-print("\nAppendix C - selected breakpoints and dates:")
-for break_number, (location, date_label) in enumerate(
-    zip(appendix_breakpoints, appendix_break_dates), start=1
-):
-    print(f"Breakpoint {break_number}: location={location}, date={date_label}")
-
-print("\nAppendix C - break types:")
-print(appendix_result.break_types)
-
-# Save the Appendix C IC path for direct use in the paper's supplementary tables.
-appendix_ic_path = appendix_result.ic_path.copy()
-appendix_ic_csv = table_output_dir / "fred_md_appendix_C_ic_path.csv"
-appendix_ic_latex = table_output_dir / "fred_md_appendix_C_ic_path.tex"
-
-appendix_ic_path.to_csv(appendix_ic_csv, index=False)
-appendix_ic_path.to_latex(
-    appendix_ic_latex,
-    index=False,
-    caption="Information-criterion path for the FRED-MD case with max_break=7.",
-    label="tab:fred_md_appendix_C_ic_path",
-)
-
-print(f"Appendix C IC path CSV saved to: {appendix_ic_csv}")
-print(f"Appendix C IC path LaTeX saved to: {appendix_ic_latex}")

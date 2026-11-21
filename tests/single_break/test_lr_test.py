@@ -4,10 +4,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ._helpers import generate_panel_data, make_fake_factor_estimator
-from fmbqml import SingleBreakQML, SingleBreakResults
 import fmbqml.single_break.model as qml_module
+from fmbqml import SingleBreakQML, SingleBreakResults
 from fmbqml.utils.safe_logdet import safe_logdet
+
+from ._helpers import generate_panel_data, make_fake_factor_estimator
 
 
 def test_estimation_and_lr_share_qml_profile_and_breakpoint(monkeypatch):
@@ -33,7 +34,7 @@ def test_lr_test_runs_and_returns_result(monkeypatch):
         model, "_calculate_factors", make_fake_factor_estimator(model, r=2)
     )
 
-    def fake_cv(F_hat, trim_ratio, n_sim=5000, random_state=None):
+    def fake_cv(F_hat, trim_ratio, n_sim=5000, random_state=None, n_jobs=-1):
         return np.array([1.0, 2.0, 3.0])
 
     monkeypatch.setattr(qml_module, "critical_value_lr_hac_m", fake_cv)
@@ -72,7 +73,7 @@ def test_lr_test_rejects_and_classifies(monkeypatch):
         model, "_calculate_factors", make_fake_factor_estimator(model, r=2)
     )
 
-    def fake_cv(F_hat, trim_ratio, n_sim=5000, random_state=None):
+    def fake_cv(F_hat, trim_ratio, n_sim=5000, random_state=None, n_jobs=-1):
         return np.array([-1e9, -1e9, -1e9])
 
     def fake_classify_breakpoint_result(**kwargs):
@@ -104,7 +105,7 @@ def test_lr_test_non_rejection_keeps_candidate(monkeypatch):
         model, "_calculate_factors", make_fake_factor_estimator(model, r=2)
     )
 
-    def fake_cv(F_hat, trim_ratio, n_sim=5000, random_state=None):
+    def fake_cv(F_hat, trim_ratio, n_sim=5000, random_state=None, n_jobs=-1):
         return np.array([1e9, 1e9, 1e9])
 
     monkeypatch.setattr(qml_module, "critical_value_lr_hac_m", fake_cv)
@@ -118,7 +119,7 @@ def test_lr_test_non_rejection_keeps_candidate(monkeypatch):
     assert result["candidate_breakpoint"] is not None
 
 
-def test_get_lr_profile_after_lr_test(monkeypatch):
+def test_lr_profile_property_after_lr_test(monkeypatch):
     X = generate_panel_data(T=200, N=100)
     model = SingleBreakQML(X, trim_ratio=0.1, factor_criterion=4)
 
@@ -126,7 +127,7 @@ def test_get_lr_profile_after_lr_test(monkeypatch):
         model, "_calculate_factors", make_fake_factor_estimator(model, r=2)
     )
 
-    def fake_cv(F_hat, trim_ratio, n_sim=5000, random_state=None):
+    def fake_cv(F_hat, trim_ratio, n_sim=5000, random_state=None, n_jobs=-1):
         return np.array([1.0, 2.0, 3.0])
 
     monkeypatch.setattr(qml_module, "critical_value_lr_hac_m", fake_cv)

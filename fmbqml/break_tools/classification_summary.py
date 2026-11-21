@@ -2,13 +2,13 @@
 
 """Formatting helpers for breakpoint-classification results."""
 
-from typing import Dict, Iterable, Optional
+from collections.abc import Iterable
 
 
 def summarize_break_types(
-        break_types: Optional[Iterable],
-        n_breakpoints: Optional[int] = None
-) -> Dict[str, int]:
+        break_types: Iterable | None,
+        n_breakpoints: int | None = None
+) -> dict[str, int]:
     """
     Summarize breakpoint types.
 

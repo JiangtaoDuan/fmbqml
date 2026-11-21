@@ -1,7 +1,7 @@
 """Sphinx configuration for the fmbqml documentation."""
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT))
 project = "fmbqml"
 author = "Liting Chen, Jiangtao Duan, and Xu Han"
 copyright = "2026, Liting Chen, Jiangtao Duan, and Xu Han"
-release = "0.1.6"
+release = "0.1.7"
 version = release
 
 extensions = [

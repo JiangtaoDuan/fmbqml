@@ -4,10 +4,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ._helpers import fake_estimate_panel_factors, generate_panel_data
-from fmbqml import MultiBreakQML
 import fmbqml.multiple_break.model as mqml_module
+from fmbqml import MultiBreakQML
 from fmbqml.utils.breakpoint_utils import map_breakpoints_to_labels
+
+from ._helpers import fake_estimate_panel_factors, generate_panel_data
 
 
 def test_multiple_model_init_with_valid_numpy_array():
@@ -215,7 +216,6 @@ def test_get_factor_estimates_computes_and_returns_dict(monkeypatch):
     assert result["L_hat"].shape == (12, 3)
     assert result["VNT"].shape == (3, 3)
     assert result["factor_criterion"] == 1
-    assert result["factor_criterion"] == 1
 
 
 def test_multiple_break_public_boolean_options_are_validated():
@@ -230,3 +230,48 @@ def test_multiple_break_public_boolean_options_are_validated():
 
     with pytest.raises(TypeError, match="verbose"):
         model.classify_joint_breaks(verbose="false")
+
+
+def test_configuration_direct_assignment_and_get_parameters():
+    model = MultiBreakQML(generate_panel_data(), max_break=2, max_factors=5)
+    initial = model.get_parameters()
+    assert set(initial) == {"max_break", "trim_ratio", "max_factors", "factor_criterion"}
+    initial["max_break"] = 123
+    assert model.max_break == 2
+    model._F_hat = np.ones((model.T, 1))
+    model._joint_results = {"breakpoints": [20]}
+    model.joint_estimated = True
+    model.max_break = 3
+    assert model.max_break == 3
+    assert model._F_hat is None and model._joint_results == {}
+    assert not model.joint_estimated
+    model.factor_criterion = "PC1"
+    assert model.get_parameters()["factor_criterion"] == 3
+    model._joint_results = {"breakpoints": [20]}
+    with pytest.raises(ValueError):
+        model.max_break = -1
+    assert model.max_break == 3 and model._joint_results == {"breakpoints": [20]}
+    with pytest.raises(AttributeError):
+        model.N = 10
+    with pytest.raises(AttributeError):
+        model.X = np.zeros_like(model.X)
+
+
+def test_factor_matrix_properties_return_independent_copies():
+    model = MultiBreakQML(
+        generate_panel_data(T=80, N=12), max_break=2, max_factors=5
+    )
+    model._r_hat = 2
+    model._F_hat = np.arange(model.T * 2, dtype=float).reshape(model.T, 2)
+    model._L_hat = np.arange(model.N * 2, dtype=float).reshape(model.N, 2)
+    model._VNT = np.eye(2)
+
+    factors = model.factors_
+    loadings = model.factor_loadings_
+
+    assert factors.shape == (model.T, 2)
+    assert loadings.shape == (model.N, 2)
+    factors[0, 0] = -999.0
+    loadings[0, 0] = -999.0
+    assert model._F_hat[0, 0] != -999.0
+    assert model._L_hat[0, 0] != -999.0

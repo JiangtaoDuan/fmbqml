@@ -1,25 +1,27 @@
 
 """High-level orchestration for breakpoint classification."""
 
-from typing import Any, Dict, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
+
 from fmbqml.break_tools.classification_summary import summarize_break_types
 from fmbqml.break_tools.classify_break_types import classify_break_types
 
 
 def classify_breakpoint_result(
         X,
-        breakpoints: Optional[Sequence[int]],
-        result_dict: Dict[str, Any],
+        breakpoints: Sequence[int] | None,
+        result_dict: dict[str, Any],
         max_factors: int,
         factor_criterion: int,
-        full_sample_factor_number: Optional[int],
+        full_sample_factor_number: int | None,
         T: int,
-        trim_ratio: Optional[float] = None,
-        min_regime_length: Optional[int] = None,
+        trim_ratio: float | None = None,
+        min_regime_length: int | None = None,
         full_sample_standardize: bool = False,
         segment_standardize: bool = True,
         verbose: bool = False
-) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Classify one or multiple breakpoints and update a result dictionary.
 

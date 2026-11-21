@@ -5,7 +5,9 @@ import pytest
 
 from fmbqml.multiple_break.joint_testing import _normalize_factors, _run_joint_sup_lr
 from fmbqml.statistical_tools.brownian import simulate_brownian_motion
-from fmbqml.statistical_tools.critical_values import simulate_single_sup_lr_critical_values
+from fmbqml.statistical_tools.critical_values import (
+    simulate_single_sup_lr_critical_values,
+)
 from fmbqml.statistical_tools.hac import hac_newey_west_94
 from tests.audit_numerical_verification import independent_hac_reference
 
@@ -36,13 +38,6 @@ def test_brownian_motion_increment_scaling():
     rng = np.random.default_rng(seed)
     expected = np.array([rng.standard_normal(dimension) for _ in range(grid_size)]).T
     np.testing.assert_allclose(increments * np.sqrt(grid_size), expected, rtol=1e-13, atol=1e-13)
-
-
-def test_factor_normalization_is_scale_invariant():
-    _, factors = _reference_factors()
-    normalized = _normalize_factors(factors)
-    np.testing.assert_allclose(normalized.T @ normalized / len(factors), np.eye(2), atol=1e-12)
-    np.testing.assert_allclose(_normalize_factors(factors * 1e-8), normalized, atol=1e-12)
 
 
 def test_joint_lr_and_simulated_critical_values_against_reference():

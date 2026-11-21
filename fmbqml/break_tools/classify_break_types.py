@@ -2,7 +2,7 @@
 
 import warnings
 from numbers import Integral
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -11,7 +11,7 @@ import fmbqml.utils as U
 from fmbqml.factor_tools.nb_factors import bai_ng_factor_count
 
 
-def _validate_breakpoint_sequence(breakpoints, T: int) -> List[int]:
+def _validate_breakpoint_sequence(breakpoints, T: int) -> list[int]:
     """Validate breakpoints without silently rounding, sorting, or filtering.
 
     Breakpoints must be supplied as a one-dimensional iterable of strictly
@@ -67,7 +67,7 @@ def _zscore_columns(X: np.ndarray) -> np.ndarray:
 
 
 def _criterion_vector_from_bai_ng_result(
-    result: Dict[str, Any],
+    result: dict[str, Any],
     criterion: str
 ) -> np.ndarray:
     """
@@ -111,9 +111,9 @@ def _estimate_factor_number_by_nb(
     factor_criterion: str,
     min_length: int,
     lower_bound: int = 0,
-    upper_bound: Optional[int] = None,
+    upper_bound: int | None = None,
     standardize_segment: bool = True,
-) -> Optional[int]:
+) -> int | None:
     """
     Estimate the number of factors in a segment using Bai--Ng criteria.
 
@@ -197,16 +197,16 @@ def _estimate_factor_number_by_nb(
 
 
 def classify_break_types(
-    X: Union[np.ndarray, pd.DataFrame],
-    breakpoints: List[int],
+    X: np.ndarray | pd.DataFrame,
+    breakpoints: list[int],
     max_factors: int = 10,
-    trim_ratio: Optional[float] = 0.1,
-    min_regime_length: Optional[int] = None,
-    factor_criterion: Union[int, str] = "IC2",
-    full_sample_factor_number: Optional[int] = None,
+    trim_ratio: float | None = 0.1,
+    min_regime_length: int | None = None,
+    factor_criterion: int | str = "IC2",
+    full_sample_factor_number: int | None = None,
     full_sample_standardize: bool = True,
     segment_standardize: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Classify estimated breakpoints according to factor-number relationships.
 

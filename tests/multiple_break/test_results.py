@@ -4,8 +4,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ._helpers import generate_panel_data, make_fake_ic_path
 from fmbqml import MultiBreakQML, MultiBreakResults
+
+from ._helpers import generate_panel_data, make_fake_ic_path
 
 
 def test_multiple_break_result_getters_return_nested_copies():
@@ -134,7 +135,7 @@ def test_result_constructor_requires_dictionary():
         MultiBreakResults([])
 
 
-def test_get_ic_path_returns_dataframe_and_independent_copy():
+def test_ic_path_property_returns_dataframe_and_independent_copy():
     X = generate_panel_data(T=80, N=12)
     model = MultiBreakQML(X, max_break=2, max_factors=3)
 
@@ -164,3 +165,30 @@ def test_get_ic_path_returns_dataframe_and_independent_copy():
     new_ic_path = MultiBreakResults(model._joint_results).ic_path
     assert new_ic_path.loc[0, "IC"] == 10.0
     assert new_ic_path.loc[2, "estimated_breakpoints"] == [20, 50]
+
+
+def test_multiple_break_to_dict_can_omit_diagnostic_paths():
+    result = MultiBreakResults({
+        "test_type": "mqml_joint",
+        "breakpoints": [10, 20],
+        "n_breaks": 2,
+        "ic_path": [
+            {"m": 0, "IC": 10.0},
+            {"m": 1, "IC": 8.0},
+            {"m": 2, "IC": 7.0},
+        ],
+        "simulated_statistics": np.arange(100, dtype=float),
+    })
+
+    full = result.to_dict()
+    compact = result.to_dict(include_diagnostics=False)
+
+    assert "ic_path" in full
+    assert "simulated_statistics" in full
+    assert "ic_path" not in compact
+    assert "simulated_statistics" not in compact
+    assert compact["breakpoints"] == [10, 20]
+    assert compact["n_breaks"] == 2
+
+    with pytest.raises(TypeError, match="include_diagnostics"):
+        result.to_dict(include_diagnostics=1)

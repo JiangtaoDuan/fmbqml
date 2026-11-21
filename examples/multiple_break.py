@@ -1,102 +1,101 @@
-"""Multiple-break example for fmbqml."""
+"""Multiple-break estimation and joint LR testing with fmbqml.
 
-from pathlib import Path
+Demonstrates:
+- Joint estimation of the number and locations of breakpoints
+- Information-criterion (IC) path inspection
+- Joint sup-LR testing
 
-import matplotlib
-matplotlib.use("Agg")
+Related paper section: Section 5.1.
+"""
 
-from matplotlib import pyplot as plt
+# Standalone example corresponding to the tutorial.
+# Requires fmbqml and numpy.
+# Run: python examples/multiple_break.py
+
 import numpy as np
 
 from fmbqml import MultiBreakQML
 
+print("\n" + "=" * 72)
+print("Multiple-break estimation and joint LR testing with fmbqml")
+print("=" * 72)
 
-def run_multiple_break_example(n_sim=1000):
-    """Run a simulated multiple-break example with joint estimation and testing."""
-    rng = np.random.RandomState(42)
-    T, N, r0 = 600, 100, 3
-    rho = 0.7
-    true_breakpoints = [150, 300, 450]
+# 5.1. Generate the multiple-break panel
+print("\n[1/5] Generating the multiple-break panel...")
 
-    print("Multiple-break example")
-    print(f"T = {T}, N = {N}, r0 = {r0}, rho = {rho}")
-    print(f"True breakpoints = {true_breakpoints}")
+# Use the fixed random stream used for this simulation example.
+rng = np.random.RandomState(42)
+T, N, r0 = 600, 100, 3
+rho = 0.7
+true_breakpoints = [150, 300, 450]
 
-    # Generate the factor process.
-    u = rng.standard_normal((T, r0))
-    F = np.zeros((T, r0))
-    F[0, :] = u[0, :] / np.sqrt(1.0 - rho**2)
-    for t in range(1, T):
-        F[t, :] = rho * F[t - 1, :] + u[t, :]
+# Factor innovations have variance I; the initial factor has stationary variance 1/(1-rho^2).
+u = rng.standard_normal((T, r0))
+F = np.zeros((T, r0))
+F[0, :] = u[0, :] / np.sqrt(1.0 - rho**2)
+for t in range(1, T):
+    F[t, :] = rho * F[t - 1, :] + u[t, :]
 
-    # Generate idiosyncratic errors.
-    E = rng.standard_normal((T, N))
+# Idiosyncratic errors are independent standard normal across time and units.
+E = rng.standard_normal((T, N))
+loadings = [
+    rng.normal(scale=np.sqrt(1.0 / r0), size=(N, r0))
+    for _ in range(4)
+]
+boundaries = [0, *true_breakpoints, T]
+X = np.empty((T, N))
+for regime, loading in enumerate(loadings):
+    start, end = boundaries[regime:regime + 2]
+    X[start:end, :] = F[start:end, :] @ loading.T + E[start:end, :]
 
-    # Generate regime-specific loading matrices and construct the panel.
-    loadings = [
-        rng.normal(scale=np.sqrt(1.0 / r0), size=(N, r0))
-        for _ in range(4)
-    ]
-    boundaries = [0, *true_breakpoints, T]
-    X = np.empty((T, N))
-    for regime, loading in enumerate(loadings):
-        start, end = boundaries[regime:regime + 2]
-        X[start:end, :] = F[start:end, :] @ loading.T + E[start:end, :]
+# 5.1. Jointly estimate the number and locations of breakpoints
+print("\n[2/5] Jointly estimating the number and locations of breakpoints...")
 
-    print(f"Generated data matrix X with shape {X.shape}")
+multi_model = MultiBreakQML(
+    X,
+    max_break=5,
+    max_factors=15,
+    factor_criterion="IC1",
+    trim_ratio=0.10,
+)
 
-    model = MultiBreakQML(
-        X,
-        max_break=5,
-        max_factors=15,
-        factor_criterion="IC1",
-        trim_ratio=0.10,
-    )
+# Display the model configuration used for joint estimation and testing.
+print("Model parameters:")
+print(multi_model.get_parameters())
 
-    print("\nJoint breakpoint estimation")
-    joint_results = model.estimate_breaks_jointly(
-        min_break=0,
-        classify=True,
-    )
-    print(joint_results.summary())
+joint_results = multi_model.estimate_breaks_jointly(
+    min_break=0,
+    classify=True,
+)
+print(joint_results.summary())
 
-    print("\nSelected joint-estimation results")
-    print(f"Selected number of breaks: {joint_results.n_breaks}")
-    print(f"Estimated breakpoints: {joint_results.breakpoints}")
-    print(f"Breakpoint types: {joint_results.break_types}")
+# 5.1. Extract the joint-estimation results
 
-    print("\nInformation-criterion path")
-    print(joint_results.format_ic_path_table())
+print("\nJoint-estimation results:")
+print(f"  Number of breaks : {joint_results.n_breaks}")
+print(f"  Breakpoints      : {joint_results.breakpoints}")
+print(f"  Break types      : {joint_results.break_types}")
 
-    output_dir = Path(__file__).resolve().parent / "output" / "figures"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    figure_path = output_dir / "multiple_break_mqml_profile.png"
-    fig, _ = joint_results.plot_mqml_profile(save_path=figure_path, show=False)
-    plt.close(fig)
-    print(f"MQML profile saved to:\n{figure_path}")
+# 5.1. Display the information-criterion path
+print("\n[3/5] Displaying the information-criterion path...")
 
-    print("\nJoint sup-LR test")
-    joint_lr_result = model.joint_sup_lr_test(
-        n_breaks=3,
-        alpha=0.05,
-        n_sim=n_sim,
-        random_state=123,
-        classify=True,
-    )
-    print(joint_lr_result.summary())
+print("Information-criterion values across candidate break counts:")
+print(joint_results.format_ic_path_table())
 
-    print("\nSelected joint sup-LR results")
-    print(f"LR statistic: {joint_lr_result.test_statistic:.4f}")
-    print(f"Critical value: {joint_lr_result.critical_value:.4f}")
-    print(f"Reject H0: {joint_lr_result.reject_null}")
-    print(f"Candidate breakpoints under H1: {joint_lr_result.candidate_breakpoints}")
-    print(f"Accepted breakpoints: {joint_lr_result.breakpoints}")
-
-    return {
-        "joint_results": joint_results,
-        "joint_lr_result": joint_lr_result,
-    }
+# 5.1. Test no breaks against exactly three breaks
+print("\n[4/5] Performing the joint sup-LR test for three breaks...")
 
 
-if __name__ == "__main__":
-    run_multiple_break_example()
+joint_lr_result = multi_model.joint_sup_lr_test(
+    n_breaks=3,
+    alpha=0.05,
+    n_sim=1000,
+    random_state=123,
+)
+print(joint_lr_result.summary())
+
+# Appendix B. Figure 5: Multiple-break IC and QML-loss profiles
+print("\n[5/5] Displaying the multiple-break diagnostic profiles...")
+
+joint_results.plot_mqml_profile(show=True)
+

@@ -56,11 +56,26 @@ def find_min_qml(F_hat, T, h, m, *, cost_matrix=None):
 
     Parameters
     ----------
-    cost_matrix : ndarray, optional
+    F_hat : array-like of shape (T, r)
+        Estimated factor observations, with one observation per row.
+    T : int
+        Number of observations in ``F_hat``.
+    h : int
+        Minimum number of observations in each segment.
+    m : int
+        Exact number of breakpoints to estimate; zero denotes one segment.
+    cost_matrix : ndarray of shape (T + 1, T + 1), optional
         Precomputed segment-cost matrix from :func:`build_qml_cost_matrix`.
         It must have been built from the same ``F_hat`` and ``h``. Supplying
         it allows callers evaluating several values of ``m`` to reuse the
         expensive segment costs. If omitted, the matrix is built internally.
+
+    Returns
+    -------
+    minimum : float
+        Minimum sum of segment-wise QML objective values.
+    breakpoints : ndarray of shape (m,)
+        Estimated segment boundaries in ascending order; empty when ``m=0``.
     """
     F_hat = np.asarray(F_hat, dtype=float)
 

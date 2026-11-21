@@ -2,9 +2,8 @@
 """Argument validation shared by public estimators and tests."""
 
 from numbers import Integral, Real
+
 import numpy as np
-
-
 
 
 def validate_trim_ratio(trim_ratio: float) -> float:
@@ -29,7 +28,7 @@ def validate_alpha(alpha: float) -> float:
     Validate significance level for the LR test.
     """
     if isinstance(alpha, bool) or not isinstance(alpha, Real):
-        raise ValueError(
+        raise TypeError(
             f"Significance level 'alpha' must be one of "
             f"(0.01, 0.05, 0.1). Got {alpha}."
         )

@@ -1,10 +1,12 @@
 """Result object for multiple_break QML."""
 
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, List
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
+
 import fmbqml.utils as U
+from fmbqml.utils.formatting import _DisplayDict
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -14,45 +16,69 @@ if TYPE_CHECKING:
 class MultiBreakResults:
     """Statistical result object with attribute-based access."""
 
-    def __init__(self, results: Dict[str, Any]) -> None:
+    def __init__(self, results: dict[str, Any]) -> None:
         if not isinstance(results, dict):
             raise TypeError("results must be a dictionary of computed statistics.")
-        self._results: Dict[str, Any] = deepcopy(results)
+        self._results: dict[str, Any] = deepcopy(results)
 
     def _get(self, key: str, default: Any = None) -> Any:
         """Internal lookup for display methods; not a public mapping API."""
         return self._results.get(key, default)
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Return a deep copy of all stored results.
+    def to_dict(self, include_diagnostics: bool = True) -> dict[str, Any]:
+        """Return an independent dictionary containing the stored results.
 
-        The returned dictionary is independent of this result object, so
-        modifying it does not alter the stored results.
+        Parameters
+        ----------
+        include_diagnostics : bool, default=True
+            If True, include diagnostic paths and arrays. If False, omit
+            potentially large diagnostic data while retaining the principal
+            estimation or test results.
+
+        Returns
+        -------
+        dict
+            A deep copy of the stored results. The returned dictionary is
+            independent of this result object.
+
+        Notes
+        -----
+        The returned dictionary displays one top-level field per line.
         """
-        return deepcopy(self._results)
+        include_diagnostics = U.validate_boolean(
+            include_diagnostics, "include_diagnostics"
+        )
+        if include_diagnostics:
+            results = deepcopy(self._results)
+        else:
+            excluded = {'ic_path', 'simulated_statistics'}
+            results = deepcopy({
+                key: value for key, value in self._results.items() if key not in excluded
+            })
+        return _DisplayDict(results)
 
     @property
-    def test_type(self) -> Optional[str]:
+    def test_type(self) -> str | None:
         """Analysis type that produced this result."""
         return self._get("test_type")
 
     @property
-    def test_statistic(self) -> Optional[float]:
+    def test_statistic(self) -> float | None:
         """Observed likelihood-ratio test statistic, when available."""
         return self._get("test_statistic")
 
     @property
-    def critical_value(self) -> Optional[float]:
+    def critical_value(self) -> float | None:
         """Simulated critical value at the requested significance level."""
         return self._get("critical_value")
 
     @property
-    def reject_null(self) -> Optional[bool]:
+    def reject_null(self) -> bool | None:
         """Whether the null hypothesis is rejected; None when no test was performed."""
         return self._get("reject_null")
 
     @property
-    def estimated_factors(self) -> Optional[int]:
+    def estimated_factors(self) -> int | None:
         """Number of pseudo-factors used in the analysis."""
         return self._get("estimated_factors")
 
@@ -62,32 +88,32 @@ class MultiBreakResults:
         return self._get("factor_criterion")
 
     @property
-    def max_factors(self) -> Optional[int]:
+    def max_factors(self) -> int | None:
         """Maximum candidate number of pseudo-factors."""
         return self._get("max_factors")
 
     @property
-    def trim_ratio(self) -> Optional[float]:
+    def trim_ratio(self) -> float | None:
         """Trimming proportion used to define the breakpoint search region."""
         return self._get("trim_ratio")
 
     @property
-    def significance_level(self) -> Optional[float]:
+    def significance_level(self) -> float | None:
         """Significance level used for the hypothesis test, when available."""
         return self._get("significance_level", self._get("alpha"))
 
     @property
-    def runtime_seconds(self) -> Optional[float]:
+    def runtime_seconds(self) -> float | None:
         """Wall-clock runtime of the analysis, in seconds."""
         return self._get("runtime_seconds")
 
     @property
-    def T(self) -> Optional[int]:
+    def T(self) -> int | None:
         """Number of time observations in the input panel."""
         return self._get("T")
 
     @property
-    def N(self) -> Optional[int]:
+    def N(self) -> int | None:
         """Number of cross-sectional series in the input panel."""
         return self._get("N")
 
@@ -102,7 +128,7 @@ class MultiBreakResults:
         return deepcopy(self._get("classification_criteria"))
 
     @property
-    def candidate_breakpoints(self) -> Optional[List[int]]:
+    def candidate_breakpoints(self) -> list[int] | None:
         """Breakpoints selected under the alternative in a joint sup-LR test."""
         values = self._get("candidate_breakpoints")
         return None if values is None else deepcopy(list(values))
@@ -113,28 +139,28 @@ class MultiBreakResults:
         return deepcopy(self._get("candidate_break_labels"))
 
     @property
-    def breakpoints(self) -> List[int]:
+    def breakpoints(self) -> list[int]:
         """Accepted breakpoints, or QML-estimated breakpoints for joint estimation."""
         values = self._get("breakpoints")
         return [] if values is None else deepcopy(list(values))
 
     @property
-    def n_breaks(self) -> Optional[int]:
+    def n_breaks(self) -> int | None:
         """Number of breaks selected by joint QML estimation or specified for testing."""
         return self._get("n_breaks")
 
     @property
-    def max_break(self) -> Optional[int]:
+    def max_break(self) -> int | None:
         """Maximum number of breaks considered by the joint estimator."""
         return self._get("max_break")
 
     @property
-    def min_break(self) -> Optional[int]:
+    def min_break(self) -> int | None:
         """Minimum number of breaks considered by the joint estimator."""
         return self._get("min_break")
 
     @property
-    def ic_path(self) -> Optional[pd.DataFrame]:
+    def ic_path(self) -> pd.DataFrame | None:
         """Public IC path with the statistics relevant to model comparison.
 
         Diagnostic fields remain in the internal result dictionary, but are
@@ -177,7 +203,7 @@ class MultiBreakResults:
         return deepcopy(self._get("break_labels"))
 
     @property
-    def min_segment_length(self) -> Optional[int]:
+    def min_segment_length(self) -> int | None:
         """Minimum number of observations required in each regime."""
         return self._get("min_segment_length")
 
@@ -197,7 +223,7 @@ class MultiBreakResults:
         return f"{number:.{digits}f}"
 
     @staticmethod
-    def _compact_breakpoint_values(values: Any) -> List[Any]:
+    def _compact_breakpoint_values(values: Any) -> list[Any]:
         """Normalize breakpoint values without relying on array truthiness."""
         if values is None:
             return []
@@ -362,21 +388,60 @@ class MultiBreakResults:
         return deepcopy(self._get("grid_size"))
 
     def summary(self, include_labels: bool = True) -> U.Summary:
-        """Return a structured result summary without recomputing estimates."""
-        result = self.to_dict()
+        """Return a structured result summary without recomputing estimates.
+
+        Parameters
+        ----------
+        include_labels : bool, default=True
+            Whether to include original observation labels for reported and
+            candidate breakpoints when available.
+
+        Returns
+        -------
+        Summary
+            Structured statistical report.
+        """
+        result = self._results.copy()
         if not include_labels:
             for key in ("break_label", "candidate_break_label", "break_labels", "candidate_break_labels"):
                 result.pop(key, None)
-        return U.format_multi_break_result_summary(result)
+        return deepcopy(U.format_multi_break_result_summary(result))
 
     def plot_mqml_profile(
             self,
-            figsize: Tuple[int, int] = (8, 4),
+            figsize: tuple[int, int] = (8, 4),
             plot_loss: bool = True,
-            save_path: Optional[str] = None,
+            save_path: str | None = None,
             show: bool = True
-    ) -> Tuple["Figure", "Axes"]:
-        """Plot the saved joint-QML information-criterion path; return (fig, ax)."""
+    ) -> tuple["Figure", "Axes"]:
+        """Plot the saved joint-QML information-criterion path.
+
+        Parameters
+        ----------
+        figsize : tuple of float, default=(8, 4)
+            Figure width and height in inches.
+        plot_loss : bool, default=True
+            Whether to plot the QML loss on a secondary vertical axis when
+            the loss is available.
+        save_path : str or path-like or None, default=None
+            Destination for the figure; no file is written when None.
+        show : bool, default=True
+            Whether to call ``matplotlib.pyplot.show()``. When False, the
+            figure can still be saved and is returned without being displayed.
+
+        Returns
+        -------
+        fig : matplotlib.figure.Figure
+            Created figure, including the secondary loss axis when shown.
+        ax : matplotlib.axes.Axes
+            Primary axes containing the information-criterion path.
+
+        Raises
+        ------
+        ValueError
+            If the result was not produced by joint QML estimation or the
+            information-criterion path is unavailable.
+        """
         if self._get("test_type") != "mqml_joint":
             raise ValueError("plot_mqml_profile() requires a result from estimate_breaks_jointly().")
         return U.plot_mqml_profile(

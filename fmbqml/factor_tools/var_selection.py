@@ -1,12 +1,11 @@
 
 """Variance-based utilities for factor and rank selection."""
 
-from typing import Union
 
 import numpy as np
 
 
-def rth(array: Union[list, np.ndarray], r: int) -> np.ndarray:
+def rth(array: list | np.ndarray, r: int) -> np.ndarray:
     """
     Extract the r largest elements from an array.
 
@@ -170,9 +169,8 @@ def fit_var(data: np.ndarray, p_min: int, p_max: int, cons: int):
     e_opt = ehat[phat]
 
     # Compare with the zero-lag model when p_min = 0
-    if p_min == 0:
-        if BICzero < BIC[phat]:
-            phi_opt = Phizero
-            e_opt = ehatzero
+    if p_min == 0 and BICzero < BIC[phat]:
+        phi_opt = Phizero
+        e_opt = ehatzero
 
     return phi_opt, e_opt

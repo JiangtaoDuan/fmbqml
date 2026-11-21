@@ -5,7 +5,6 @@ Theorem 5 of the multiple-change extension of the factor-model LR test.
 The supremum over admissible partitions is solved by dynamic programming.
 """
 
-from typing import Dict, Optional
 
 import numpy as np
 
@@ -16,6 +15,7 @@ from fmbqml.statistical_tools import (
     joint_sup_lr_cv,
     select_critical_value,
 )
+
 
 def _normalize_factors(F_hat: np.ndarray) -> np.ndarray:
     """Impose the full-sample PC normalization ``F'F/T = I``.
@@ -52,8 +52,9 @@ def _run_joint_sup_lr(
     alpha: float = 0.01,
     n_sim: int = 2000,
     grid_size: int = 500,
-    random_state: Optional[int] = None,
-) -> Dict[str, object]:
+    random_state: int | None = None,
+    n_jobs: int = -1,
+) -> dict[str, object]:
     """Run the joint sup-LR test for a prespecified number of breaks.
 
     ``grid_size`` controls only the numerical approximation of the continuous
@@ -76,6 +77,8 @@ def _run_joint_sup_lr(
         Brownian-bridge grid size used only in critical-value simulation.
     random_state : int or None, default=None
         Seed for reproducible critical-value simulation.
+    n_jobs : int, default=-1
+        Number of parallel Monte Carlo workers.
 
     Returns
     -------
@@ -130,6 +133,7 @@ def _run_joint_sup_lr(
         n_sim,
         grid_size,
         random_state,
+        n_jobs=n_jobs,
     )
     critical_value = select_critical_value(critical_values, alpha)
 

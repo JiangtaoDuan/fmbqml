@@ -1,10 +1,12 @@
 """Tests for single-break result objects and reporting."""
 
 import numpy as np
+import pytest
+
+import fmbqml.single_break.model as qml_module
+from fmbqml import SingleBreakQML, SingleBreakResults
 
 from ._helpers import generate_panel_data, make_fake_factor_estimator, make_panel_data
-from fmbqml import SingleBreakQML, SingleBreakResults
-import fmbqml.single_break.model as qml_module
 
 
 def test_single_break_result_getter_returns_nested_copies():
@@ -126,7 +128,7 @@ def test_summary_after_lr_test(monkeypatch):
         model, "_calculate_factors", make_fake_factor_estimator(model, r=2)
     )
 
-    def fake_cv(F_hat, trim_ratio, n_sim=5000, random_state=None):
+    def fake_cv(F_hat, trim_ratio, n_sim=5000, random_state=None, n_jobs=-1):
         return np.array([1.0, 2.0, 3.0])
 
     monkeypatch.setattr(qml_module, "critical_value_lr_hac_m", fake_cv)
@@ -142,7 +144,7 @@ def test_summary_after_lr_test(monkeypatch):
     assert "5%" in text
 
 
-def test_public_break_type_requires_classification():
+def test_break_type_property_is_none_without_classification():
     model = SingleBreakQML(generate_panel_data(T=40, N=8), max_factors=3)
     model.is_tested = True
     model._last_result_type = "test"
@@ -165,3 +167,30 @@ def test_single_result_snapshot_survives_model_update():
     model.set_parameters(trim_ratio=0.2)
     np.testing.assert_array_equal(result.qml_values, original)
     assert str(result.summary())
+
+
+def test_single_break_to_dict_can_omit_diagnostic_arrays():
+    result = SingleBreakResults({
+        "test_type": "lr_test",
+        "breakpoint": 10,
+        "candidate_breakpoint": 10,
+        "candidate_breaks": np.array([5, 6, 7, 8, 9, 10]),
+        "lr_profile": np.arange(6, dtype=float),
+        "qml_profile": np.arange(6, dtype=float) + 1,
+        "test_statistic": 12.5,
+    })
+
+    full = result.to_dict()
+    compact = result.to_dict(include_diagnostics=False)
+
+    assert "candidate_breaks" in full
+    assert "lr_profile" in full
+    assert "qml_profile" in full
+    assert "candidate_breaks" not in compact
+    assert "lr_profile" not in compact
+    assert "qml_profile" not in compact
+    assert compact["breakpoint"] == 10
+    assert compact["test_statistic"] == 12.5
+
+    with pytest.raises(TypeError, match="include_diagnostics"):
+        result.to_dict(include_diagnostics="false")

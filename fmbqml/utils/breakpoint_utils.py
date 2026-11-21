@@ -1,13 +1,14 @@
 
 """Utilities for validating and labeling breakpoint locations."""
 
-from typing import Tuple
+from collections.abc import Iterable
 from numbers import Integral, Real
-from typing import Any, Iterable, List, Optional
+from typing import Any
+
 import numpy as np
 
 
-def calculate_break_range(T: int, trim_ratio: float) -> Tuple[int, int]:
+def calculate_break_range(T: int, trim_ratio: float) -> tuple[int, int]:
     """
     Compute and validate the admissible breakpoint search range.
 
@@ -94,9 +95,9 @@ def compute_min_segment_length(T: int, trim_ratio: float) -> int:
     return min_segment_length
 
 def map_breakpoint_to_label(
-        breakpoint: Optional[int],
+        breakpoint: int | None,
         index
-) -> Optional[Any]:
+) -> Any | None:
     """
     Map a 1-indexed breakpoint position to the corresponding index label.
     """
@@ -114,7 +115,7 @@ def map_breakpoint_to_label(
 def map_breakpoints_to_labels(
         breakpoints: Iterable[int],
         index
-) -> List[Any]:
+) -> list[Any]:
     """
     Map 1-indexed breakpoint positions to corresponding index labels.
     """

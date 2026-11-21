@@ -4,7 +4,7 @@ Installation
 Requirements
 ------------
 
-* Python 3.8 or later.
+* Python 3.10 or later.
 * NumPy, SciPy, pandas, Matplotlib, and joblib. These dependencies are
   installed automatically when ``fmbqml`` is installed with pip.
 
@@ -13,7 +13,7 @@ Install from PyPI
 
 .. code-block:: console
 
-   python -m pip install fmbqml==0.1.6
+   python -m pip install fmbqml==0.1.7
 
 To install the latest published release instead, omit the version pin:
 

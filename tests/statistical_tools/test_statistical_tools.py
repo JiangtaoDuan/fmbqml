@@ -1,22 +1,17 @@
 """Tests for statistical_tools test_statistical_tools."""
 
 import numpy as np
-
 import pytest
 
-from fmbqml.statistical_tools.brownian import simulate_brownian_motion
-
 import fmbqml.statistical_tools.hac as hac_module
-
-from fmbqml.statistical_tools.hac import hac_newey_west_94
-
 from fmbqml.statistical_tools import select_critical_value
-
+from fmbqml.statistical_tools.brownian import simulate_brownian_motion
 from fmbqml.statistical_tools.critical_values import (
     bridge_score_matrix,
     joint_sup_lr_cv,
     simulate_single_sup_lr_critical_values,
 )
+from fmbqml.statistical_tools.hac import hac_newey_west_94
 
 
 def test_brownian_reproducibility_and_original_rng_sequence():

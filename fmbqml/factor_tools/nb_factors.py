@@ -2,8 +2,7 @@
 
 import numpy as np
 from numpy.linalg import eigh
-from scipy.linalg import inv, cholesky
-
+from scipy.linalg import cholesky, inv
 
 
 def _safe_cholesky(matrix, *, context, jitter=1e-10):
@@ -36,33 +35,35 @@ def _safe_cholesky(matrix, *, context, jitter=1e-10):
 
 
 def bai_ng_factor_count(X, kmax=None):
-    """
-    PURPOSE: Bai and Ng (2002) "Determining the Number of Factors in Approximate Factors Models",
-    Econometrica, 70,1, p 191-221
+    """Select factor counts using Bai and Ng information criteria.
 
-    Parameters:
-    -----------
-    X : numpy array, shape (T, N)
-        Matrix of observations
+    Implements criteria from Bai and Ng (2002), "Determining the Number of
+    Factors in Approximate Factor Models," Econometrica, 70(1), 191-221.
+
+    Parameters
+    ----------
+    X : ndarray of shape (T, N)
+        Panel of observations, with time periods in rows and series in columns.
     kmax : int, optional
-        The maximum number of common factors used to compute the criterion functions for
-        the estimation of r, the number of common factors. If not specified, kmax=min(N,T)
+        Maximum number of factors considered. If omitted or NaN, uses
+        ``min(N, T)``.
 
-    Returns:
-    --------
+    Returns
+    -------
     results : dict
-        Dictionary containing:
-        - khat: Estimated Numbers of Factor with IC1, IC2, IC3, PC1, PC2, PC3, AIC3 and BIC3
-        - khat_IC: Estimated Numbers of Factor with IC1, IC2 and IC3
-        - khat_PC: Estimated Numbers of Factor with PC1, PC2 and PC3
-        - khat_BIC3: Estimated Numbers of Factor with BIC3
-        - khat_AIC3: Estimated Numbers of Factor with AIC3
-        - kmax: Maximum Number of Factors Authorized
-        - IC: IC1, IC2 and IC3 Information criteria for k=0,...,kmax
-        - PC: PC1, PC2 and PC3 Information criteria for k=0,...,kmax
-        - BIC3: BIC3 Information criterion for k=0,...,kmax
-        - AIC3: AIC3 Information criterion for k=0,...,kmax
-        - Vkmax: Estimated Variance of Residuals with kmax factors
+        Dictionary with the following entries:
+
+        * ``khat``: selected counts for IC1, IC2, IC3, PC1, PC2, PC3,
+          AIC3 and BIC3, in that order.
+        * ``khat_IC`` and ``khat_PC``: selected counts for the three IC and
+          PC criteria, respectively.
+        * ``khat_AIC3`` and ``khat_BIC3``: selected counts for AIC3 and BIC3.
+        * ``kmax``: maximum number of factors considered.
+        * ``IC`` and ``PC``: arrays containing the factor count followed by
+          the three criterion values for each count from zero to ``kmax``.
+        * ``AIC3`` and ``BIC3``: arrays containing the factor count and the
+          corresponding criterion value for each count from zero to ``kmax``.
+        * ``Vkmax``: estimated residual variance with ``kmax`` factors.
     """
 
     T, N = X.shape
@@ -182,21 +183,21 @@ def bai_ng_factor_count(X, kmax=None):
     # --- Estimated Number of Common Factors ---
     # ------------------------------------------
 
-    # Estimated Numbers of Factor with PC
+    # Criterion rows start at zero factors, so the minimizing index is the count.
     PCs = PC[:, 1:4]
-    khat_PC = np.argmin(PCs, axis=0)   # +1 because we start from k=1
+    khat_PC = np.argmin(PCs, axis=0)
 
     # Estimated Numbers of Factor with IC
     ICs = IC[:, 1:4]
-    khat_IC = np.argmin(ICs, axis=0)   # +1 because we start from k=1
+    khat_IC = np.argmin(ICs, axis=0)
 
     # Estimated Numbers of Factor with BIC3
     BIC3s = BIC3[:, 1]
-    khat_BIC3 = np.argmin(BIC3s)   # +1 because we start from k=1
+    khat_BIC3 = np.argmin(BIC3s)
 
     # Estimated Numbers of Factor with AIC3
     AIC3s = AIC3[:, 1]
-    khat_AIC3 = np.argmin(AIC3s)   # +1 because we start from k=1
+    khat_AIC3 = np.argmin(AIC3s)
 
     khat = np.concatenate([khat_IC, khat_PC, [khat_AIC3], [khat_BIC3]])
 
