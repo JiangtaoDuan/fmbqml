@@ -185,29 +185,3 @@ The following publications provide background on high-dimensional factor models 
 
 `fmbqml` is distributed under the GNU General Public License, version 3 or (at your option) any later version (GPL-3.0-or-later). See [LICENSE.txt](LICENSE.txt) for the full license.
 
-### Updating model configuration
-
-Both `SingleBreakQML` and `MultiBreakQML` provide `get_parameters()` to read
-current configuration and `set_parameters()` to change it. Configuration can
-also be modified directly; all successful changes invalidate derived model
-state, and invalid changes leave existing state intact.
-
-```python
-model = SingleBreakQML(X, max_factors=5)
-settings = model.get_parameters()
-model.set_parameters(trim_ratio=0.2)
-model.max_factors = 4
-```
-
-Both models accept the shared settings as positional or keyword arguments,
-in the order `trim_ratio`, `max_factors`, and `factor_criterion`. For example,
-`model.set_parameters(0.2, 4)` is equivalent to
-`model.set_parameters(trim_ratio=0.2, max_factors=4)`. The multiple-break
-model also accepts `max_break` as the fourth argument or by keyword. Earlier
-multiple-break versions used `max_break` as the first positional argument;
-update those calls to use `max_break=...`.
-
-The configuration dictionary contains `trim_ratio`, `max_factors`, and
-`factor_criterion` (as a normalized integer), plus `max_break` for
-`MultiBreakQML`. To change panel data use `set_data(new_X)`; assigning to
-`model.X`, `model.T`, or `model.N` is not supported.
