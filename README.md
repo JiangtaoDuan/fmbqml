@@ -171,8 +171,6 @@ The Sphinx documentation source is available in the GitHub [`docs/`](https://git
 
 ## References
 
-To cite the software, see [CITATION.cff](CITATION.cff). Please also cite
-the methodology papers relevant to your analysis.
 
 The following publications provide background on high-dimensional factor models and structural-break estimation:
 
